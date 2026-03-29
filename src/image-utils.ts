@@ -83,7 +83,7 @@ export class ImageTransformer {
 			trace(`Running sips command: /usr/bin/sips ${args.join(" ")}`);
 			const proc = spawnSyncLogged("/usr/bin/sips", args, {
 				maxBuffer: 8 * 1024 * 1024
-			}, { label: "sips", purpose: "resize/convert image" });
+			}, { label: "sips", intent: "缩放/转换图片(sips)" });
 
 			if (proc.status !== 0) {
 				throw new Error(`Sips failed with status ${proc.status}`);
@@ -108,7 +108,7 @@ export class ImageTransformer {
 		const proc = spawnSyncLogged("magick", magickArgs, {
 			maxBuffer: 8 * 1024 * 1024,
 			input: this.buffer
-		}, { label: "magick", purpose: "resize/convert image" });
+		}, { label: "magick", intent: "缩放/转换图片(ImageMagick)" });
 
 		return proc.stdout as Buffer;
 	}
@@ -140,7 +140,7 @@ export const isSipsInstalled = (): boolean => {
 	}
 
 	try {
-		execText("/usr/bin/sips", ["--version"], { stdio: ["ignore", "pipe", "ignore"] }, { label: "sips", purpose: "--version" });
+		execText("/usr/bin/sips", ["--version"], { stdio: ["ignore", "pipe", "ignore"] }, { label: "sips", intent: "检查 sips 是否可用(--version)" });
 		return true;
 	} catch (error) {
 		return false;
@@ -149,7 +149,7 @@ export const isSipsInstalled = (): boolean => {
 
 export const isImageMagickInstalled = (): boolean => {
 	try {
-		return execText("magick", ["--version"], {}, { label: "magick", purpose: "--version" })
+		return execText("magick", ["--version"], {}, { label: "magick", intent: "检查 ImageMagick 是否可用(--version)" })
 			.split("\n")
 			.filter(line => line.includes("Version: ImageMagick"))
 			.length > 0;

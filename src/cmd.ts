@@ -4,7 +4,7 @@ import { debug, error, shouldLogCommands, shouldLogData, warn, logValue } from "
 
 export interface CommandMeta {
 	label?: string;
-	purpose?: string;
+	intent?: string;
 }
 
 const argsToString = (command: string, args: string[]): string => {
@@ -20,9 +20,10 @@ const bufferDigest = (buffer: Buffer): { sha256: string; bytes: number } => {
 export const execText = (command: string, args: string[], options?: ExecFileSyncOptions, meta?: CommandMeta): string => {
 	const start = Date.now();
 	const cmdLine = argsToString(command, args);
+	const intent = meta?.intent;
 
 	if (shouldLogCommands()) {
-		debug("cmd.exec.start", { label: meta?.label, purpose: meta?.purpose, cmd: cmdLine, cwd: options?.cwd });
+		debug("command.start", { intent, label: meta?.label, cmd: cmdLine, cwd: options?.cwd });
 	}
 
 	try {
@@ -31,7 +32,7 @@ export const execText = (command: string, args: string[], options?: ExecFileSync
 
 		if (shouldLogCommands()) {
 			const dataFields = shouldLogData() ? { stdout: logValue(stdout) } : { stdoutBytes: Buffer.byteLength(stdout, "utf8") };
-			debug("cmd.exec.ok", { label: meta?.label, cmd: cmdLine, durationMs, ...dataFields });
+			debug("command.ok", { intent, label: meta?.label, cmd: cmdLine, durationMs, ...dataFields });
 		}
 
 		return stdout;
@@ -45,7 +46,7 @@ export const execText = (command: string, args: string[], options?: ExecFileSync
 			const dataFields = shouldLogData()
 				? { stdout: logValue(stdout), stderr: logValue(stderr) }
 				: { stdoutBytes: Buffer.byteLength(stdout, "utf8"), stderrBytes: Buffer.byteLength(stderr, "utf8") };
-			error("cmd.exec.err", { label: meta?.label, purpose: meta?.purpose, cmd: cmdLine, durationMs, code, ...dataFields });
+			error("command.err", { intent, label: meta?.label, cmd: cmdLine, durationMs, code, ...dataFields });
 		}
 
 		throw err;
@@ -55,9 +56,10 @@ export const execText = (command: string, args: string[], options?: ExecFileSync
 export const execBuffer = (command: string, args: string[], options?: ExecFileSyncOptions, meta?: CommandMeta): Buffer => {
 	const start = Date.now();
 	const cmdLine = argsToString(command, args);
+	const intent = meta?.intent;
 
 	if (shouldLogCommands()) {
-		debug("cmd.execbuf.start", { label: meta?.label, purpose: meta?.purpose, cmd: cmdLine, cwd: options?.cwd });
+		debug("command.start", { intent, label: meta?.label, cmd: cmdLine, cwd: options?.cwd });
 	}
 
 	try {
@@ -66,7 +68,7 @@ export const execBuffer = (command: string, args: string[], options?: ExecFileSy
 
 		if (shouldLogCommands()) {
 			const digest = bufferDigest(stdout);
-			debug("cmd.execbuf.ok", { label: meta?.label, cmd: cmdLine, durationMs, ...digest });
+			debug("command.ok", { intent, label: meta?.label, cmd: cmdLine, durationMs, ...digest });
 		}
 
 		return stdout;
@@ -77,10 +79,10 @@ export const execBuffer = (command: string, args: string[], options?: ExecFileSy
 		const code = err?.status ?? err?.code;
 
 		if (shouldLogCommands()) {
-			const payload: Record<string, unknown> = { label: meta?.label, purpose: meta?.purpose, cmd: cmdLine, durationMs, code };
+			const payload: Record<string, unknown> = { intent, label: meta?.label, cmd: cmdLine, durationMs, code };
 			if (stdout) {Object.assign(payload, { stdout: shouldLogData() ? logValue(stdout.toString("base64")) : bufferDigest(stdout) });}
 			if (stderr) {Object.assign(payload, { stderr: shouldLogData() ? logValue(stderr.toString("utf8")) : { bytes: stderr.length } });}
-			error("cmd.execbuf.err", payload);
+			error("command.err", payload);
 		}
 
 		throw err;
@@ -89,17 +91,18 @@ export const execBuffer = (command: string, args: string[], options?: ExecFileSy
 
 export const spawnLogged = (command: string, args: string[], options?: SpawnOptions, meta?: CommandMeta): ChildProcess => {
 	const cmdLine = argsToString(command, args);
+	const intent = meta?.intent;
 	if (shouldLogCommands()) {
-		debug("cmd.spawn", { label: meta?.label, purpose: meta?.purpose, cmd: cmdLine, cwd: options?.cwd });
+		debug("command.spawn", { intent, label: meta?.label, cmd: cmdLine, cwd: options?.cwd });
 	}
 
 	const child = spawn(command, args, (options ?? {}) as SpawnOptions) as unknown as ChildProcess;
 
 	if (shouldLogCommands()) {
-		child.on("spawn", () => debug("cmd.spawn.spawned", { label: meta?.label, cmd: cmdLine, pid: child.pid }));
-		child.on("error", (e: any) => error("cmd.spawn.error", { label: meta?.label, cmd: cmdLine, error: e?.message ?? String(e) }));
+		child.on("spawn", () => debug("command.spawned", { intent, label: meta?.label, cmd: cmdLine, pid: child.pid }));
+		child.on("error", (e: any) => error("command.error", { intent, label: meta?.label, cmd: cmdLine, error: e?.message ?? String(e) }));
 		child.on("exit", (code: number | null, signal: NodeJS.Signals | null) =>
-			debug("cmd.spawn.exit", { label: meta?.label, cmd: cmdLine, pid: child.pid, code, signal })
+			debug("command.exit", { intent, label: meta?.label, cmd: cmdLine, pid: child.pid, code, signal })
 		);
 	}
 
@@ -109,9 +112,10 @@ export const spawnLogged = (command: string, args: string[], options?: SpawnOpti
 export const spawnSyncLogged = (command: string, args: string[], options?: SpawnSyncOptions, meta?: CommandMeta): ReturnType<typeof spawnSync> => {
 	const start = Date.now();
 	const cmdLine = argsToString(command, args);
+	const intent = meta?.intent;
 
 	if (shouldLogCommands()) {
-		debug("cmd.spawnsync.start", { label: meta?.label, purpose: meta?.purpose, cmd: cmdLine, cwd: options?.cwd });
+		debug("command.start", { intent, label: meta?.label, cmd: cmdLine, cwd: options?.cwd });
 	}
 
 	const result = spawnSync(command, args, options);
@@ -121,7 +125,7 @@ export const spawnSyncLogged = (command: string, args: string[], options?: Spawn
 		const status = result.status;
 		const stderr = result.stderr ? (Buffer.isBuffer(result.stderr) ? result.stderr.toString("utf8") : String(result.stderr)) : "";
 		const stdout = result.stdout ? (Buffer.isBuffer(result.stdout) ? result.stdout.toString("utf8") : String(result.stdout)) : "";
-		const fields: Record<string, unknown> = { label: meta?.label, cmd: cmdLine, durationMs, status };
+		const fields: Record<string, unknown> = { intent, label: meta?.label, cmd: cmdLine, durationMs, status };
 		if (shouldLogData()) {
 			Object.assign(fields, { stdout: logValue(stdout), stderr: logValue(stderr) });
 		} else {
@@ -129,9 +133,9 @@ export const spawnSyncLogged = (command: string, args: string[], options?: Spawn
 		}
 
 		if (status === 0 || status === null) {
-			debug("cmd.spawnsync.ok", fields);
+			debug("command.ok", fields);
 		} else {
-			warn("cmd.spawnsync.err", fields);
+			warn("command.err", fields);
 		}
 	}
 

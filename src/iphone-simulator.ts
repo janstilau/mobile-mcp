@@ -87,7 +87,7 @@ export class Simctl implements Robot {
 		return execBuffer("xcrun", ["simctl", ...args], {
 			timeout: TIMEOUT,
 			maxBuffer: MAX_BUFFER_SIZE,
-		}, { label: "xcrun", purpose: `simctl ${args[0] ?? ""}`.trim() });
+		}, { label: "xcrun", intent: `调用 xcrun simctl: ${args.join(" ")}` });
 	}
 
 	public async getScreenshot(): Promise<Buffer> {
@@ -136,7 +136,7 @@ export class Simctl implements Robot {
 		const output = execText("/usr/bin/zipinfo", ["-1", zipPath], {
 			timeout: TIMEOUT,
 			maxBuffer: MAX_BUFFER_SIZE,
-		}, { label: "zipinfo", purpose: "validate zip paths" });
+		}, { label: "zipinfo", intent: "校验 zip 路径(防止 zip-slip)" });
 
 		const invalidPath = output
 			.split("\n")
@@ -166,7 +166,7 @@ export class Simctl implements Robot {
 				try {
 					execText("unzip", ["-q", path, "-d", tempDir], {
 						timeout: TIMEOUT,
-					}, { label: "unzip", purpose: "extract app zip" });
+					}, { label: "unzip", intent: "解压 .zip 应用包" });
 				} catch (error: any) {
 					throw new ActionableError(`Failed to unzip file: ${error.message}`);
 				}
@@ -217,7 +217,7 @@ export class Simctl implements Robot {
 		const text = this.simctl("listapps", this.simulatorUuid).toString();
 		const result = execBuffer("plutil", ["-convert", "json", "-o", "-", "-r", "-"], {
 			input: text,
-		}, { label: "plutil", purpose: "plist->json" });
+		}, { label: "plutil", intent: "将 plist 转为 json(plutil)" });
 
 		const output = JSON.parse(result.toString()) as Record<string, AppInfo>;
 		return Object.values(output).map(app => ({

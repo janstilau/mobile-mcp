@@ -2,7 +2,7 @@ import { debug, error, shouldLogData, shouldLogHttp, logValue } from "./logger";
 
 export interface FetchMeta {
 	label?: string;
-	purpose?: string;
+	intent?: string;
 }
 
 const methodOf = (init?: RequestInit): string => {
@@ -29,13 +29,20 @@ const bodyToString = (body: RequestInit["body"]): string => {
 export const fetchLogged = async (url: string, init?: RequestInit, meta?: FetchMeta): Promise<Response> => {
 	const start = Date.now();
 	const method = methodOf(init);
+	const intent = meta?.intent;
 
 	if (shouldLogHttp()) {
-		const fields: Record<string, unknown> = { label: meta?.label, purpose: meta?.purpose, method, url };
+		const fields: Record<string, unknown> = {
+			intent,
+			label: meta?.label,
+			cmd: `HTTP ${method} ${url}`,
+			httpMethod: method,
+			httpUrl: url,
+		};
 		if (shouldLogData() && init?.body !== undefined) {
 			fields.requestBody = logValue(bodyToString(init.body));
 		}
-		debug("http.fetch.start", fields);
+		debug("http.start", fields);
 	}
 
 	let response: Response;
@@ -43,14 +50,22 @@ export const fetchLogged = async (url: string, init?: RequestInit, meta?: FetchM
 		response = await fetch(url, init);
 	} catch (err: any) {
 		if (shouldLogHttp()) {
-			error("http.fetch.err", { label: meta?.label, purpose: meta?.purpose, method, url, error: err?.message ?? String(err) });
+			error("http.err", { intent, label: meta?.label, httpMethod: method, httpUrl: url, error: err?.message ?? String(err) });
 		}
 		throw err;
 	}
 
 	if (shouldLogHttp()) {
 		const durationMs = Date.now() - start;
-		const fields: Record<string, unknown> = { label: meta?.label, method, url, status: response.status, durationMs };
+		const fields: Record<string, unknown> = {
+			intent,
+			label: meta?.label,
+			cmd: `HTTP ${method} ${url}`,
+			httpMethod: method,
+			httpUrl: url,
+			httpStatus: response.status,
+			durationMs,
+		};
 		if (shouldLogData()) {
 			try {
 				const text = await response.clone().text();
@@ -59,7 +74,7 @@ export const fetchLogged = async (url: string, init?: RequestInit, meta?: FetchM
 				fields.responseBody = `[unavailable: ${err?.message ?? String(err)}]`;
 			}
 		}
-		debug("http.fetch.ok", fields);
+		debug("http.ok", fields);
 	}
 
 	return response;

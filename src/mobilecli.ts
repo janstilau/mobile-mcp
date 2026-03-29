@@ -39,14 +39,14 @@ export class Mobilecli {
 
 	public executeCommand(args: string[]): string {
 		const path = this.getPath();
-		return execText(path, args, { encoding: "utf8" }, { label: "mobilecli", purpose: args.join(" ") }).toString().trim();
+		return execText(path, args, { encoding: "utf8" }, { label: "mobilecli", intent: `调用 mobilecli: ${args.join(" ")}` }).toString().trim();
 	}
 
 	public spawnCommand(args: string[]): ChildProcess {
 		const binaryPath = this.getPath();
 		return spawnLogged(binaryPath, args, {
 			stdio: ["ignore", "ignore", "ignore"],
-		}, { label: "mobilecli", purpose: args.join(" ") });
+		}, { label: "mobilecli", intent: `调用 mobilecli(后台): ${args.join(" ")}` });
 	}
 
 	public executeCommandBuffer(args: string[]): Buffer {
@@ -54,7 +54,7 @@ export class Mobilecli {
 		return execBuffer(path, args, {
 			maxBuffer: MAX_BUFFER_SIZE,
 			timeout: TIMEOUT,
-		}, { label: "mobilecli", purpose: args.join(" ") });
+		}, { label: "mobilecli", intent: `调用 mobilecli(二进制): ${args.join(" ")}` });
 	}
 
 	private static getMobilecliPath(): string {

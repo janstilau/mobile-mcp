@@ -1,4 +1,5 @@
 import path from "node:path";
+import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 
 import * as xml from "fast-xml-parser";
@@ -6,7 +7,7 @@ import * as xml from "fast-xml-parser";
 import { ActionableError, Button, InstalledApp, Robot, ScreenElement, ScreenElementRect, ScreenSize, SwipeDirection, Orientation } from "./robot";
 import { validatePackageName, validateLocale } from "./utils";
 import { execBuffer, execText } from "./cmd";
-import { warn } from "./logger";
+import { debug, logValue, shouldLogData, warn } from "./logger";
 
 export interface AndroidDevice {
 	deviceId: string;
@@ -82,7 +83,7 @@ export class AndroidRobot implements Robot {
 		return execBuffer(getAdbPath(), ["-s", this.deviceId, ...args], {
 			maxBuffer: MAX_BUFFER_SIZE,
 			timeout: TIMEOUT,
-		}, { label: "adb", purpose: args.join(" ") });
+		}, { label: "adb", intent: `执行 adb: ${args.join(" ")}` });
 	}
 
 	public silentAdb(...args: string[]): Buffer {
@@ -90,7 +91,7 @@ export class AndroidRobot implements Robot {
 			maxBuffer: MAX_BUFFER_SIZE,
 			timeout: TIMEOUT,
 			stdio: ["pipe", "pipe", "pipe"],
-		}, { label: "adb", purpose: args.join(" ") });
+		}, { label: "adb", intent: `执行 adb: ${args.join(" ")}` });
 	}
 
 	public getSystemFeatures(): string[] {
@@ -306,9 +307,18 @@ export class AndroidRobot implements Robot {
 	}
 
 	public async getScreenshot(): Promise<Buffer> {
+		const start = Date.now();
+		let buffer: Buffer;
 		if (this.getDisplayCount() <= 1) {
 			// backward compatibility for android 10 and below, and for single display devices
-			return this.adb("exec-out", "screencap", "-p");
+			buffer = this.adb("exec-out", "screencap", "-p");
+			debug("android.screenshot", {
+				intent: "获取 Android 截图",
+				durationMs: Date.now() - start,
+				bytes: buffer.length,
+				sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+			});
+			return buffer;
 		}
 
 		// find the first display that is turned on, and capture that one
@@ -316,10 +326,24 @@ export class AndroidRobot implements Robot {
 		if (displayId === null) {
 			// no idea why, but we have displayCount >= 2, yet we failed to parse
 			// let's go with screencap's defaults and hope for the best
-			return this.adb("exec-out", "screencap", "-p");
+			buffer = this.adb("exec-out", "screencap", "-p");
+			debug("android.screenshot", {
+				intent: "获取 Android 截图(兜底)",
+				durationMs: Date.now() - start,
+				bytes: buffer.length,
+				sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+			});
+			return buffer;
 		}
 
-		return this.adb("exec-out", "screencap", "-p", "-d", `${displayId}`);
+		buffer = this.adb("exec-out", "screencap", "-p", "-d", `${displayId}`);
+		debug("android.screenshot", {
+			intent: `获取 Android 截图(displayId=${displayId})`,
+			durationMs: Date.now() - start,
+			bytes: buffer.length,
+			sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+		});
+		return buffer;
 	}
 
 	private collectElements(node: UiAutomatorXmlNode): ScreenElement[] {
@@ -488,7 +512,13 @@ export class AndroidRobot implements Robot {
 				continue;
 			}
 
-			return dump.substring(dump.indexOf("<?xml"));
+			const xmlText = dump.substring(dump.indexOf("<?xml"));
+			debug("android.uiautomator.xml", {
+				intent: "获取 UIAutomator XML",
+				stdout: shouldLogData() ? logValue(xmlText) : undefined,
+				bytes: xmlText.length,
+			});
+			return xmlText;
 		}
 
 		throw new ActionableError("Failed to get UIAutomator XML");
@@ -537,7 +567,7 @@ export class AndroidDeviceManager {
 		try {
 			const output = execText(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.build.version.release"], {
 				timeout: 5000,
-			}, { label: "adb", purpose: "getprop ro.build.version.release" }).trim();
+			}, { label: "adb", intent: "获取 Android 版本(ro.build.version.release)" }).trim();
 			return output;
 		} catch (error) {
 			return "unknown";
@@ -549,7 +579,7 @@ export class AndroidDeviceManager {
 			// Try getting AVD name first (for emulators)
 			const avdName = execText(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.boot.qemu.avd_name"], {
 				timeout: 5000,
-			}, { label: "adb", purpose: "getprop ro.boot.qemu.avd_name" }).trim();
+			}, { label: "adb", intent: "获取模拟器 AVD 名称(ro.boot.qemu.avd_name)" }).trim();
 
 			if (avdName !== "") {
 				// Replace underscores with spaces (e.g., "Pixel_9_Pro" -> "Pixel 9 Pro")
@@ -559,7 +589,7 @@ export class AndroidDeviceManager {
 			// Fall back to product model
 			const output = execText(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.product.model"], {
 				timeout: 5000,
-			}, { label: "adb", purpose: "getprop ro.product.model" }).trim();
+			}, { label: "adb", intent: "获取设备型号(ro.product.model)" }).trim();
 			return output;
 		} catch (error) {
 			return deviceId;
@@ -568,7 +598,7 @@ export class AndroidDeviceManager {
 
 	public getConnectedDevices(): AndroidDevice[] {
 		try {
-			const names = execText(getAdbPath(), ["devices"], {}, { label: "adb", purpose: "devices" })
+			const names = execText(getAdbPath(), ["devices"], {}, { label: "adb", intent: "列出已连接 Android 设备(adb devices)" })
 				.split("\n")
 				.map(line => line.trim())
 				.filter(line => line !== "")
@@ -588,7 +618,7 @@ export class AndroidDeviceManager {
 
 	public getConnectedDevicesWithDetails(): Array<AndroidDevice & { version: string, name: string }> {
 		try {
-			const names = execText(getAdbPath(), ["devices"], {}, { label: "adb", purpose: "devices" })
+			const names = execText(getAdbPath(), ["devices"], {}, { label: "adb", intent: "列出已连接 Android 设备(adb devices)" })
 				.split("\n")
 				.map(line => line.trim())
 				.filter(line => line !== "")

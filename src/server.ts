@@ -83,6 +83,8 @@ export const createMcpServer = (): McpServer => {
 				const start = Date.now();
 
 				info("tool.start", {
+					intent: `执行工具: ${name}`,
+					cmd: `tool ${name}`,
 					mcpRequestId: _extra?.requestId ?? null,
 					title,
 					description,
@@ -94,8 +96,11 @@ export const createMcpServer = (): McpServer => {
 					const durationMs = Date.now() - start;
 
 					info("tool.ok", {
+						intent: `工具完成: ${name}`,
+						cmd: `tool ${name}`,
 						durationMs,
-						result: shouldLogData() ? logValue(response) : { bytes: Buffer.byteLength(response, "utf8") },
+						responseBody: shouldLogData() ? logValue(response) : undefined,
+						resultBytes: Buffer.byteLength(response, "utf8"),
 					});
 
 					posthog("tool_invoked", { "ToolName": name, "Duration": durationMs }).then();
@@ -107,13 +112,14 @@ export const createMcpServer = (): McpServer => {
 					posthog("tool_failed", { "ToolName": name }).then();
 
 					if (err instanceof ActionableError) {
-						info("tool.actionable_error", { durationMs, message: err.message });
+						info("tool.actionable_error", { intent: `工具失败(可修复): ${name}`, durationMs, error: err.message });
 						return {
 							content: [{ type: "text", text: `${err.message}. Please fix the issue and try again.` }],
 						};
 					}
 
 					error("tool.exception", {
+						intent: `工具异常: ${name}`,
 						durationMs,
 						message: err?.message ?? String(err),
 						stack: err?.stack ?? null,

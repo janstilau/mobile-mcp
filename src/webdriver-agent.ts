@@ -31,7 +31,7 @@ export class WebDriverAgent {
 	public async isRunning(): Promise<boolean> {
 		const url = `http://${this.host}:${this.port}/status`;
 		try {
-			const response = await fetchLogged(url, undefined, { label: "wda", purpose: "status" });
+			const response = await fetchLogged(url, undefined, { label: "wda", intent: "检查 WebDriverAgent 状态" });
 			const json = await response.json();
 			return response.status === 200 && json.value?.ready === true;
 		} catch (error) {
@@ -48,7 +48,7 @@ export class WebDriverAgent {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ capabilities: { alwaysMatch: { platformName: "iOS" } } }),
-		}, { label: "wda", purpose: "createSession" });
+		}, { label: "wda", intent: "创建 WebDriverAgent 会话" });
 
 		if (!response.ok) {
 			const errorText = await response.text();
@@ -65,7 +65,7 @@ export class WebDriverAgent {
 
 	public async deleteSession(sessionId: string) {
 		const url = `http://${this.host}:${this.port}/session/${sessionId}`;
-		const response = await fetchLogged(url, { method: "DELETE" }, { label: "wda", purpose: "deleteSession" });
+		const response = await fetchLogged(url, { method: "DELETE" }, { label: "wda", intent: "删除 WebDriverAgent 会话" });
 		return response.json();
 	}
 
@@ -80,7 +80,7 @@ export class WebDriverAgent {
 	public async getScreenSize(sessionUrl?: string): Promise<ScreenSize> {
 		if (sessionUrl) {
 			const url = `${sessionUrl}/wda/screen`;
-			const response = await fetchLogged(url, undefined, { label: "wda", purpose: "getScreenSize" });
+			const response = await fetchLogged(url, undefined, { label: "wda", intent: "获取屏幕尺寸(会话内)" });
 			const json = await response.json();
 			return {
 				width: json.value.screenSize.width,
@@ -90,7 +90,7 @@ export class WebDriverAgent {
 		} else {
 			return this.withinSession(async sessionUrlInner => {
 				const url = `${sessionUrlInner}/wda/screen`;
-				const response = await fetchLogged(url, undefined, { label: "wda", purpose: "getScreenSize" });
+				const response = await fetchLogged(url, undefined, { label: "wda", intent: "获取屏幕尺寸" });
 				const json = await response.json();
 				return {
 					width: json.value.screenSize.width,
@@ -110,7 +110,7 @@ export class WebDriverAgent {
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify({ value: [keys] }),
-			}, { label: "wda", purpose: "keys" });
+			}, { label: "wda", intent: "输入文本" });
 		});
 	}
 
@@ -141,7 +141,7 @@ export class WebDriverAgent {
 				body: JSON.stringify({
 					name: button,
 				}),
-			}, { label: "wda", purpose: "pressButton" });
+			}, { label: "wda", intent: "按键操作" });
 
 			return response.json();
 		});
@@ -170,7 +170,7 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			}, { label: "wda", purpose: "tap" });
+			}, { label: "wda", intent: "点击(坐标)" });
 		});
 	}
 
@@ -203,7 +203,7 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			}, { label: "wda", purpose: "doubleTap" });
+			}, { label: "wda", intent: "双击(坐标)" });
 		});
 	}
 
@@ -230,7 +230,7 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			}, { label: "wda", purpose: "longPress" });
+			}, { label: "wda", intent: "长按(坐标)" });
 		});
 	}
 
@@ -274,7 +274,7 @@ export class WebDriverAgent {
 
 	public async getPageSource(): Promise<SourceTree> {
 		const url = `http://${this.host}:${this.port}/source/?format=json`;
-		const response = await fetchLogged(url, undefined, { label: "wda", purpose: "pageSource" });
+		const response = await fetchLogged(url, undefined, { label: "wda", intent: "获取页面元素树(page source)" });
 		const json = await response.json();
 		return json as SourceTree;
 	}
@@ -289,13 +289,13 @@ export class WebDriverAgent {
 			await fetchLogged(`${sessionUrl}/url`, {
 				method: "POST",
 				body: JSON.stringify({ url }),
-			}, { label: "wda", purpose: "openUrl" });
+			}, { label: "wda", intent: "打开 URL" });
 		});
 	}
 
 	public async getScreenshot(): Promise<Buffer> {
 		const url = `http://${this.host}:${this.port}/screenshot`;
-		const response = await fetchLogged(url, undefined, { label: "wda", purpose: "screenshot" });
+		const response = await fetchLogged(url, undefined, { label: "wda", intent: "获取截图" });
 		const json = await response.json();
 		return Buffer.from(json.value, "base64");
 	}
@@ -356,7 +356,7 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			}, { label: "wda", purpose: "swipe(actions)" });
+			}, { label: "wda", intent: "滑动(actions)" });
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -366,7 +366,7 @@ export class WebDriverAgent {
 			// Clear actions to ensure they complete
 			await fetchLogged(`${sessionUrl}/actions`, {
 				method: "DELETE",
-			}, { label: "wda", purpose: "swipe(actions:clear)" });
+			}, { label: "wda", intent: "清理 actions" });
 		});
 	}
 
@@ -417,7 +417,7 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			}, { label: "wda", purpose: "swipeFromCoordinate(actions)" });
+			}, { label: "wda", intent: "从坐标滑动(actions)" });
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -427,7 +427,7 @@ export class WebDriverAgent {
 			// Clear actions to ensure they complete
 			await fetchLogged(`${sessionUrl}/actions`, {
 				method: "DELETE",
-			}, { label: "wda", purpose: "swipeFromCoordinate(actions:clear)" });
+			}, { label: "wda", intent: "清理 actions" });
 		});
 	}
 
@@ -440,14 +440,14 @@ export class WebDriverAgent {
 				body: JSON.stringify({
 					orientation: orientation.toUpperCase()
 				})
-			}, { label: "wda", purpose: "setOrientation" });
+			}, { label: "wda", intent: "设置屏幕方向" });
 		});
 	}
 
 	public async getOrientation(): Promise<Orientation> {
 		return this.withinSession(async sessionUrl => {
 			const url = `${sessionUrl}/orientation`;
-			const response = await fetchLogged(url, undefined, { label: "wda", purpose: "getOrientation" });
+			const response = await fetchLogged(url, undefined, { label: "wda", intent: "获取屏幕方向" });
 			const json = await response.json();
 			return json.value.toLowerCase() as Orientation;
 		});

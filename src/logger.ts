@@ -148,6 +148,124 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
 	error: 50,
 };
 
+const LEVEL_LABELS: Record<LogLevel, string> = {
+	trace: "追踪",
+	debug: "调试",
+	info: "信息",
+	warn: "警告",
+	error: "错误",
+};
+
+const EVENT_LABELS: Record<string, string> = {
+	"command.start": "命令开始",
+	"command.ok": "命令完成",
+	"command.err": "命令失败",
+	"command.spawn": "启动子进程",
+	"command.spawned": "子进程已启动",
+	"command.exit": "子进程已退出",
+	"command.error": "子进程异常",
+	"http.start": "HTTP 请求开始",
+	"http.ok": "HTTP 请求完成",
+	"http.err": "HTTP 请求失败",
+	"tool.start": "工具开始执行",
+	"tool.ok": "工具执行完成",
+	"tool.actionable_error": "工具可处理错误",
+	"tool.exception": "工具异常",
+	"mcp.in": "MCP 入站消息",
+	"mcp.out": "MCP 出站消息",
+	"server.listen": "服务已启动",
+};
+
+const JSON_FIELD_LABELS: Record<string, string> = {
+	ts: "时间",
+	level: "级别",
+	event: "事件",
+	intent: "意图",
+	cmd: "命令行",
+	label: "标签",
+	traceId: "追踪ID",
+	tool: "工具",
+	device: "设备",
+	client: "客户端",
+	callsite: "调用位置",
+	cwd: "工作目录",
+	durationMs: "耗时_ms",
+	stdout: "标准输出",
+	stderr: "错误输出",
+	stdoutBytes: "标准输出字节数",
+	stderrBytes: "错误输出字节数",
+	requestBody: "请求",
+	responseBody: "回复",
+	reply: "回复",
+	httpMethod: "请求方法",
+	httpUrl: "请求地址",
+	httpStatus: "HTTP状态码",
+	code: "退出码",
+	status: "状态",
+	error: "错误",
+	message: "消息",
+	stack: "堆栈",
+	pid: "进程ID",
+	signal: "信号",
+	payload: "载荷",
+	port: "端口",
+	url: "地址",
+	mcpMethod: "MCP方法",
+	mcpId: "MCP请求ID",
+	mcpRequestId: "MCP原始请求ID",
+	title: "标题",
+	description: "描述",
+	args: "参数",
+	resultBytes: "结果字节数",
+	bytes: "字节数",
+	sha256: "SHA256",
+	details: "详情",
+};
+
+const JSON_FIELD_ORDER = [
+	"时间",
+	"级别",
+	"意图",
+	"命令行",
+	"事件",
+	"请求方法",
+	"请求地址",
+	"HTTP状态码",
+	"回复",
+	"耗时_ms",
+	"错误",
+	"消息",
+	"状态",
+	"退出码",
+	"标签",
+	"工具",
+	"设备",
+	"客户端",
+	"追踪ID",
+	"工作目录",
+	"MCP方法",
+	"MCP请求ID",
+	"MCP原始请求ID",
+	"端口",
+	"地址",
+	"标题",
+	"描述",
+	"参数",
+	"载荷",
+	"结果字节数",
+	"标准输出",
+	"错误输出",
+	"标准输出字节数",
+	"错误输出字节数",
+	"字节数",
+	"SHA256",
+	"进程ID",
+	"信号",
+	"调用位置",
+	"堆栈",
+	"详情",
+];
+
 const shouldLogLevel = (level: LogLevel): boolean => {
 	return LEVEL_ORDER[level] >= LEVEL_ORDER[CONFIG.level];
 };
@@ -192,6 +310,69 @@ const getCallsite = (): string | undefined => {
 		}
 	}
 	return undefined;
+};
+
+const translateJsonFieldName = (key: string): string => {
+	return JSON_FIELD_LABELS[key] ?? key;
+};
+
+const translateJsonValue = (key: string, value: unknown): unknown => {
+	if (key === "level" && typeof value === "string") {
+		return LEVEL_LABELS[value as LogLevel] ?? value;
+	}
+	if (key === "event" && typeof value === "string") {
+		return EVENT_LABELS[value] ?? value;
+	}
+	if (Array.isArray(value)) {
+		return value.map(item => translateJsonValue(key, item));
+	}
+	if (value && typeof value === "object") {
+		return translateJsonObject(value as Record<string, unknown>);
+	}
+	return value;
+};
+
+const translateJsonObject = (value: Record<string, unknown>): Record<string, unknown> => {
+	const translated: Record<string, unknown> = {};
+	for (const [key, fieldValue] of Object.entries(value)) {
+		if (fieldValue === undefined) {continue;}
+		translated[translateJsonFieldName(key)] = translateJsonValue(key, fieldValue);
+	}
+	return translated;
+};
+
+const orderJsonObject = (value: Record<string, unknown>): Record<string, unknown> => {
+	const ordered: Record<string, unknown> = {};
+	for (const key of JSON_FIELD_ORDER) {
+		if (Object.prototype.hasOwnProperty.call(value, key)) {
+			ordered[key] = value[key];
+		}
+	}
+	for (const key of Object.keys(value).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))) {
+		if (!Object.prototype.hasOwnProperty.call(ordered, key)) {
+			ordered[key] = value[key];
+		}
+	}
+	return ordered;
+};
+
+const orderJsonObjectDeep = (value: unknown, isRoot = false): unknown => {
+	if (Array.isArray(value)) {
+		return value.map(v => orderJsonObjectDeep(v, false));
+	}
+	if (value && typeof value === "object") {
+		const obj = value as Record<string, unknown>;
+		const keys = isRoot
+			? Object.keys(obj)
+			: Object.keys(obj).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+
+		const ordered: Record<string, unknown> = {};
+		for (const key of keys) {
+			ordered[key] = orderJsonObjectDeep(obj[key], false);
+		}
+		return ordered;
+	}
+	return value;
 };
 
 const ensuredDirs = new Set<string>();
@@ -346,15 +527,90 @@ export const log = (level: LogLevel, message: string, fields?: Record<string, un
 	const callsite = getCallsite();
 
 	if (CONFIG.format === "json") {
+		const {
+			intent,
+			cmd,
+			stdout,
+			stderr,
+			stdoutBytes,
+			stderrBytes,
+			httpMethod,
+			httpUrl,
+			httpStatus,
+			durationMs,
+			requestBody,
+			responseBody,
+			reply: explicitReply,
+			payload: payloadObj,
+			resultBytes,
+			bytes,
+			sha256,
+			...rest
+		} = (fields ?? {}) as Record<string, unknown>;
+
+		const commandLine = (typeof cmd === "string" && cmd)
+			? cmd
+			: (typeof httpMethod === "string" && typeof httpUrl === "string" ? `HTTP ${httpMethod} ${httpUrl}` : undefined);
+
+		const replyFromCommand = (() => {
+			if (stdout === undefined && stderr === undefined) {return undefined;}
+			const r: Record<string, unknown> = {};
+			if (stdout !== undefined) {r.stdout = stdout;}
+			if (stderr !== undefined) {r.stderr = stderr;}
+			return r;
+		})();
+
+		const replyFromBytes = (() => {
+			if (stdoutBytes === undefined && stderrBytes === undefined && resultBytes === undefined && bytes === undefined && sha256 === undefined) {return undefined;}
+			const r: Record<string, unknown> = {};
+			if (stdoutBytes !== undefined) {r.stdoutBytes = stdoutBytes;}
+			if (stderrBytes !== undefined) {r.stderrBytes = stderrBytes;}
+			if (resultBytes !== undefined) {r.resultBytes = resultBytes;}
+			if (bytes !== undefined) {r.bytes = bytes;}
+			if (sha256 !== undefined) {r.sha256 = sha256;}
+			return r;
+		})();
+
+		const reply = responseBody ?? explicitReply ?? replyFromCommand ?? replyFromBytes;
+		const resolvedIntent = (typeof intent === "string" && intent)
+			? intent
+			: (typeof commandLine === "string" && commandLine ? "执行命令" : undefined);
+
+		const details: Record<string, unknown> = {
+			requestBody,
+			responseBody,
+			stdout,
+			stderr,
+			stdoutBytes,
+			stderrBytes,
+			payload: payloadObj,
+			resultBytes,
+			bytes,
+			sha256,
+			...rest,
+		};
+
 		const payload: Record<string, unknown> = {
 			ts,
 			level,
-			msg: message,
-			...ctx,
+			intent: resolvedIntent,
+			cmd: commandLine,
+			event: message,
+			reply,
+			httpMethod,
+			httpUrl,
+			httpStatus,
+			durationMs,
+			traceId: ctx.traceId,
+			tool: ctx.tool,
+			device: ctx.device,
+			client: ctx.client,
+			details: Object.keys(details).some(k => details[k] !== undefined) ? details : undefined,
 			...(callsite ? { callsite } : {}),
-			...(fields ?? {}),
 		};
-		writeLine(safeStringify(payload));
+		const translatedPayload = orderJsonObject(translateJsonObject(payload));
+		const deepOrdered = orderJsonObjectDeep(translatedPayload, true) as Record<string, unknown>;
+		writeLine(JSON.stringify(deepOrdered));
 		return;
 	}
 

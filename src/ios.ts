@@ -94,7 +94,7 @@ export class IosRobot implements Robot {
 	}
 
 	private async ios(...args: string[]): Promise<string> {
-		return execText(getGoIosPath(), ["--udid", this.deviceId, ...args], {}, { label: "go-ios", purpose: args.join(" ") });
+		return execText(getGoIosPath(), ["--udid", this.deviceId, ...args], {}, { label: "go-ios", intent: `调用 go-ios: --udid ${this.deviceId} ${args.join(" ")}` });
 	}
 
 	public async getIosVersion(): Promise<string> {
@@ -247,7 +247,7 @@ export class IosManager {
 
 	public isGoIosInstalled(): boolean {
 		try {
-			const output = execText(getGoIosPath(), ["version"], { stdio: ["pipe", "pipe", "ignore"] }, { label: "go-ios", purpose: "version" });
+			const output = execText(getGoIosPath(), ["version"], { stdio: ["pipe", "pipe", "ignore"] }, { label: "go-ios", intent: "检查 go-ios 是否可用(version)" });
 			const json: VersionCommandOutput = JSON.parse(output);
 			return json.version !== undefined && (json.version.startsWith("v") || json.version === "local-build");
 		} catch (error) {
@@ -256,13 +256,13 @@ export class IosManager {
 	}
 
 	public getDeviceName(deviceId: string): string {
-		const output = execText(getGoIosPath(), ["info", "--udid", deviceId], {}, { label: "go-ios", purpose: "info" });
+		const output = execText(getGoIosPath(), ["info", "--udid", deviceId], {}, { label: "go-ios", intent: `获取 iOS 设备名称(info ${deviceId})` });
 		const json: InfoCommandOutput = JSON.parse(output);
 		return json.DeviceName;
 	}
 
 	public getDeviceInfo(deviceId: string): InfoCommandOutput {
-		const output = execText(getGoIosPath(), ["info", "--udid", deviceId], {}, { label: "go-ios", purpose: "info" });
+		const output = execText(getGoIosPath(), ["info", "--udid", deviceId], {}, { label: "go-ios", intent: `获取 iOS 设备信息(info ${deviceId})` });
 		const json: InfoCommandOutput = JSON.parse(output);
 		return json;
 	}
@@ -273,7 +273,7 @@ export class IosManager {
 			return [];
 		}
 
-		const output = execText(getGoIosPath(), ["list"], {}, { label: "go-ios", purpose: "list" });
+		const output = execText(getGoIosPath(), ["list"], {}, { label: "go-ios", intent: "列出已连接 iOS 真机(go-ios list)" });
 		const json: ListCommandOutput = JSON.parse(output);
 		const devices = json.deviceList.map(device => ({
 			deviceId: device,
@@ -289,7 +289,7 @@ export class IosManager {
 			return [];
 		}
 
-		const output = execText(getGoIosPath(), ["list"], {}, { label: "go-ios", purpose: "list" });
+		const output = execText(getGoIosPath(), ["list"], {}, { label: "go-ios", intent: "列出已连接 iOS 真机(go-ios list)" });
 		const json: ListCommandOutput = JSON.parse(output);
 		const devices = json.deviceList.map(device => {
 			const info = this.getDeviceInfo(device);

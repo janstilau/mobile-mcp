@@ -2,7 +2,7 @@
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createMcpServer, getAgentVersion } from "./server";
-import { error, info, shouldLogData, shouldLogMcp, shouldLogMcpRaw, logValue } from "./logger";
+import { error, info, shouldLogData, shouldLogMcp, shouldLogMcpRaw } from "./logger";
 import express from "express";
 import { program } from "commander";
 
@@ -11,9 +11,17 @@ const instrumentTransport = (transport: any) => {
 
 	const prevOnMessage = transport.onmessage?.bind(transport);
 	transport.onmessage = (message: any) => {
+		const method = message?.method;
+		const id = message?.id;
+		const intent = method ? `收到 MCP 请求: ${method}` : (id !== undefined ? `收到 MCP 响应: id=${id}` : "收到 MCP 消息");
 		info("mcp.in", {
-			message: shouldLogMcpRaw() ? message : { type: message?.type, id: message?.id, method: message?.method },
-			raw: shouldLogData() ? logValue(message) : undefined,
+			intent,
+			cmd: method ? `mcp ${method}` : (id !== undefined ? `mcp response ${id}` : "mcp message"),
+			mcpMethod: method,
+			mcpId: id,
+			payload: (shouldLogMcpRaw() && shouldLogData())
+				? message
+				: { jsonrpc: message?.jsonrpc, method, id },
 		});
 		prevOnMessage?.(message);
 	};
@@ -21,9 +29,17 @@ const instrumentTransport = (transport: any) => {
 	const prevSend = transport.send?.bind(transport);
 	if (prevSend) {
 		transport.send = async (message: any) => {
+			const method = message?.method;
+			const id = message?.id;
+			const intent = method ? `发送 MCP 通知: ${method}` : (id !== undefined ? `发送 MCP 响应: id=${id}` : "发送 MCP 消息");
 			info("mcp.out", {
-				message: shouldLogMcpRaw() ? message : { type: message?.type, id: message?.id, method: message?.method },
-				raw: shouldLogData() ? logValue(message) : undefined,
+				intent,
+				cmd: method ? `mcp ${method}` : (id !== undefined ? `mcp response ${id}` : "mcp message"),
+				mcpMethod: method,
+				mcpId: id,
+				payload: (shouldLogMcpRaw() && shouldLogData())
+					? message
+					: { jsonrpc: message?.jsonrpc, method, id },
 			});
 			return await prevSend(message);
 		};
@@ -53,7 +69,7 @@ const startSseServer = async (port: number) => {
 	});
 
 	app.listen(port, () => {
-		error(`mobile-mcp ${getAgentVersion()} sse server listening on http://localhost:${port}/mcp`);
+		info("server.listen", { intent: "启动 SSE MCP 服务", port, url: `http://localhost:${port}/mcp` });
 	});
 };
 
@@ -65,7 +81,7 @@ const startStdioServer = async () => {
 		await server.connect(transport);
 		instrumentTransport(transport);
 
-		error("mobile-mcp server running on stdio");
+		info("server.listen", { intent: "启动 stdio MCP 服务" });
 	} catch (err: any) {
 		console.error("Fatal error in main():", err);
 		error("Fatal error in main(): " + JSON.stringify(err.stack));
