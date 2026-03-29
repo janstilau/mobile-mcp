@@ -6,7 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { ChildProcess } from "node:child_process";
 
-import { error, trace } from "./logger";
+import { error, info, trace, withLogContext, shouldLogData, logValue } from "./logger";
 import { AndroidRobot, AndroidDeviceManager } from "./android";
 import { ActionableError, Robot } from "./robot";
 import { IosManager, IosRobot } from "./ios";
@@ -75,31 +75,56 @@ export const createMcpServer = (): McpServer => {
 			inputSchema: paramsSchema,
 			annotations,
 		}, (async (args: any, _extra: any) => {
-			try {
-				trace(`Invoking ${name} with args: ${JSON.stringify(args)}`);
-				const start = +new Date();
-				const response = await cb(args);
-				const duration = +new Date() - start;
-				trace(`=> ${response}`);
-				posthog("tool_invoked", { "ToolName": name, "Duration": duration }).then();
-				return {
-					content: [{ type: "text", text: response }],
-				};
-			} catch (error: any) {
-				posthog("tool_failed", { "ToolName": name }).then();
-				if (error instanceof ActionableError) {
+			const traceId = String(_extra?.requestId ?? crypto.randomUUID());
+			const device = typeof args?.device === "string" ? args.device : undefined;
+			const client = getClientName();
+
+			return await withLogContext({ traceId, tool: name, device, client }, async () => {
+				const start = Date.now();
+
+				info("tool.start", {
+					mcpRequestId: _extra?.requestId ?? null,
+					title,
+					description,
+					args: shouldLogData() ? args : { keys: Object.keys(args ?? {}) },
+				});
+
+				try {
+					const response = await cb(args);
+					const durationMs = Date.now() - start;
+
+					info("tool.ok", {
+						durationMs,
+						result: shouldLogData() ? logValue(response) : { bytes: Buffer.byteLength(response, "utf8") },
+					});
+
+					posthog("tool_invoked", { "ToolName": name, "Duration": durationMs }).then();
 					return {
-						content: [{ type: "text", text: `${error.message}. Please fix the issue and try again.` }],
+						content: [{ type: "text", text: response }],
 					};
-				} else {
-					// a real exception
-					trace(`Tool '${description}' failed: ${error.message} stack: ${error.stack}`);
+				} catch (err: any) {
+					const durationMs = Date.now() - start;
+					posthog("tool_failed", { "ToolName": name }).then();
+
+					if (err instanceof ActionableError) {
+						info("tool.actionable_error", { durationMs, message: err.message });
+						return {
+							content: [{ type: "text", text: `${err.message}. Please fix the issue and try again.` }],
+						};
+					}
+
+					error("tool.exception", {
+						durationMs,
+						message: err?.message ?? String(err),
+						stack: err?.stack ?? null,
+					});
+
 					return {
-						content: [{ type: "text", text: `Error: ${error.message}` }],
+						content: [{ type: "text", text: `Error: ${err?.message ?? String(err)}` }],
 						isError: true,
 					};
 				}
-			}
+			});
 		}) as any);
 	};
 

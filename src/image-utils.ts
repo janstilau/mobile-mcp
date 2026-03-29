@@ -1,8 +1,8 @@
-import { execFileSync, spawnSync } from "child_process";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { trace } from "./logger";
+import { execText, spawnSyncLogged } from "./cmd";
 
 const DEFAULT_JPEG_QUALITY = 75;
 
@@ -81,9 +81,9 @@ export class ImageTransformer {
 			args.push(inputFile);
 
 			trace(`Running sips command: /usr/bin/sips ${args.join(" ")}`);
-			const proc = spawnSync("/usr/bin/sips", args, {
+			const proc = spawnSyncLogged("/usr/bin/sips", args, {
 				maxBuffer: 8 * 1024 * 1024
-			});
+			}, { label: "sips", purpose: "resize/convert image" });
 
 			if (proc.status !== 0) {
 				throw new Error(`Sips failed with status ${proc.status}`);
@@ -105,12 +105,12 @@ export class ImageTransformer {
 		const magickArgs = ["-", "-resize", `${this.newWidth}x`, "-quality", `${this.jpegOptions.quality}`, `${this.newFormat}:-`];
 		trace(`Running magick command: magick ${magickArgs.join(" ")}`);
 
-		const proc = spawnSync("magick", magickArgs, {
+		const proc = spawnSyncLogged("magick", magickArgs, {
 			maxBuffer: 8 * 1024 * 1024,
 			input: this.buffer
-		});
+		}, { label: "magick", purpose: "resize/convert image" });
 
-		return proc.stdout;
+		return proc.stdout as Buffer;
 	}
 }
 
@@ -140,7 +140,7 @@ export const isSipsInstalled = (): boolean => {
 	}
 
 	try {
-		execFileSync("/usr/bin/sips", ["--version"]);
+		execText("/usr/bin/sips", ["--version"], { stdio: ["ignore", "pipe", "ignore"] }, { label: "sips", purpose: "--version" });
 		return true;
 	} catch (error) {
 		return false;
@@ -149,8 +149,7 @@ export const isSipsInstalled = (): boolean => {
 
 export const isImageMagickInstalled = (): boolean => {
 	try {
-		return execFileSync("magick", ["--version"])
-			.toString()
+		return execText("magick", ["--version"], {}, { label: "magick", purpose: "--version" })
 			.split("\n")
 			.filter(line => line.includes("Version: ImageMagick"))
 			.length > 0;

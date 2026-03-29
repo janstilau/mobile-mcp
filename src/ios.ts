@@ -1,9 +1,10 @@
 import { Socket } from "node:net";
-import { execFileSync } from "node:child_process";
 
 import { WebDriverAgent } from "./webdriver-agent";
 import { ActionableError, Button, InstalledApp, Robot, ScreenSize, SwipeDirection, ScreenElement, Orientation } from "./robot";
 import { validatePackageName, validateLocale } from "./utils";
+import { execText } from "./cmd";
+import { warn } from "./logger";
 
 const WDA_PORT = 8100;
 const IOS_TUNNEL_PORT = 60105;
@@ -93,7 +94,7 @@ export class IosRobot implements Robot {
 	}
 
 	private async ios(...args: string[]): Promise<string> {
-		return execFileSync(getGoIosPath(), ["--udid", this.deviceId, ...args], {}).toString();
+		return execText(getGoIosPath(), ["--udid", this.deviceId, ...args], {}, { label: "go-ios", purpose: args.join(" ") });
 	}
 
 	public async getIosVersion(): Promise<string> {
@@ -246,7 +247,7 @@ export class IosManager {
 
 	public isGoIosInstalled(): boolean {
 		try {
-			const output = execFileSync(getGoIosPath(), ["version"], { stdio: ["pipe", "pipe", "ignore"] }).toString();
+			const output = execText(getGoIosPath(), ["version"], { stdio: ["pipe", "pipe", "ignore"] }, { label: "go-ios", purpose: "version" });
 			const json: VersionCommandOutput = JSON.parse(output);
 			return json.version !== undefined && (json.version.startsWith("v") || json.version === "local-build");
 		} catch (error) {
@@ -255,24 +256,24 @@ export class IosManager {
 	}
 
 	public getDeviceName(deviceId: string): string {
-		const output = execFileSync(getGoIosPath(), ["info", "--udid", deviceId]).toString();
+		const output = execText(getGoIosPath(), ["info", "--udid", deviceId], {}, { label: "go-ios", purpose: "info" });
 		const json: InfoCommandOutput = JSON.parse(output);
 		return json.DeviceName;
 	}
 
 	public getDeviceInfo(deviceId: string): InfoCommandOutput {
-		const output = execFileSync(getGoIosPath(), ["info", "--udid", deviceId]).toString();
+		const output = execText(getGoIosPath(), ["info", "--udid", deviceId], {}, { label: "go-ios", purpose: "info" });
 		const json: InfoCommandOutput = JSON.parse(output);
 		return json;
 	}
 
 	public listDevices(): IosDevice[] {
 		if (!this.isGoIosInstalled()) {
-			console.error("go-ios is not installed, no physical iOS devices can be detected");
+			warn("go-ios is not installed, no physical iOS devices can be detected");
 			return [];
 		}
 
-		const output = execFileSync(getGoIosPath(), ["list"]).toString();
+		const output = execText(getGoIosPath(), ["list"], {}, { label: "go-ios", purpose: "list" });
 		const json: ListCommandOutput = JSON.parse(output);
 		const devices = json.deviceList.map(device => ({
 			deviceId: device,
@@ -284,11 +285,11 @@ export class IosManager {
 
 	public listDevicesWithDetails(): Array<IosDevice & { version: string }> {
 		if (!this.isGoIosInstalled()) {
-			console.error("go-ios is not installed, no physical iOS devices can be detected");
+			warn("go-ios is not installed, no physical iOS devices can be detected");
 			return [];
 		}
 
-		const output = execFileSync(getGoIosPath(), ["list"]).toString();
+		const output = execText(getGoIosPath(), ["list"], {}, { label: "go-ios", purpose: "list" });
 		const json: ListCommandOutput = JSON.parse(output);
 		const devices = json.deviceList.map(device => {
 			const info = this.getDeviceInfo(device);

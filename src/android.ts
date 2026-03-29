@@ -1,11 +1,12 @@
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
 import * as xml from "fast-xml-parser";
 
 import { ActionableError, Button, InstalledApp, Robot, ScreenElement, ScreenElementRect, ScreenSize, SwipeDirection, Orientation } from "./robot";
 import { validatePackageName, validateLocale } from "./utils";
+import { execBuffer, execText } from "./cmd";
+import { warn } from "./logger";
 
 export interface AndroidDevice {
 	deviceId: string;
@@ -78,18 +79,18 @@ export class AndroidRobot implements Robot {
 	}
 
 	public adb(...args: string[]): Buffer {
-		return execFileSync(getAdbPath(), ["-s", this.deviceId, ...args], {
+		return execBuffer(getAdbPath(), ["-s", this.deviceId, ...args], {
 			maxBuffer: MAX_BUFFER_SIZE,
 			timeout: TIMEOUT,
-		});
+		}, { label: "adb", purpose: args.join(" ") });
 	}
 
 	public silentAdb(...args: string[]): Buffer {
-		return execFileSync(getAdbPath(), ["-s", this.deviceId, ...args], {
+		return execBuffer(getAdbPath(), ["-s", this.deviceId, ...args], {
 			maxBuffer: MAX_BUFFER_SIZE,
 			timeout: TIMEOUT,
 			stdio: ["pipe", "pipe", "pipe"],
-		});
+		}, { label: "adb", purpose: args.join(" ") });
 	}
 
 	public getSystemFeatures(): string[] {
@@ -534,9 +535,9 @@ export class AndroidDeviceManager {
 
 	private getDeviceVersion(deviceId: string): string {
 		try {
-			const output = execFileSync(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.build.version.release"], {
+			const output = execText(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.build.version.release"], {
 				timeout: 5000,
-			}).toString().trim();
+			}, { label: "adb", purpose: "getprop ro.build.version.release" }).trim();
 			return output;
 		} catch (error) {
 			return "unknown";
@@ -546,9 +547,9 @@ export class AndroidDeviceManager {
 	private getDeviceName(deviceId: string): string {
 		try {
 			// Try getting AVD name first (for emulators)
-			const avdName = execFileSync(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.boot.qemu.avd_name"], {
+			const avdName = execText(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.boot.qemu.avd_name"], {
 				timeout: 5000,
-			}).toString().trim();
+			}, { label: "adb", purpose: "getprop ro.boot.qemu.avd_name" }).trim();
 
 			if (avdName !== "") {
 				// Replace underscores with spaces (e.g., "Pixel_9_Pro" -> "Pixel 9 Pro")
@@ -556,9 +557,9 @@ export class AndroidDeviceManager {
 			}
 
 			// Fall back to product model
-			const output = execFileSync(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.product.model"], {
+			const output = execText(getAdbPath(), ["-s", deviceId, "shell", "getprop", "ro.product.model"], {
 				timeout: 5000,
-			}).toString().trim();
+			}, { label: "adb", purpose: "getprop ro.product.model" }).trim();
 			return output;
 		} catch (error) {
 			return deviceId;
@@ -567,8 +568,7 @@ export class AndroidDeviceManager {
 
 	public getConnectedDevices(): AndroidDevice[] {
 		try {
-			const names = execFileSync(getAdbPath(), ["devices"])
-				.toString()
+			const names = execText(getAdbPath(), ["devices"], {}, { label: "adb", purpose: "devices" })
 				.split("\n")
 				.map(line => line.trim())
 				.filter(line => line !== "")
@@ -581,15 +581,14 @@ export class AndroidDeviceManager {
 				deviceType: this.getDeviceType(name),
 			}));
 		} catch (error) {
-			console.error("Could not execute adb command, maybe ANDROID_HOME is not set?");
+			warn("Could not execute adb command, maybe ANDROID_HOME is not set?");
 			return [];
 		}
 	}
 
 	public getConnectedDevicesWithDetails(): Array<AndroidDevice & { version: string, name: string }> {
 		try {
-			const names = execFileSync(getAdbPath(), ["devices"])
-				.toString()
+			const names = execText(getAdbPath(), ["devices"], {}, { label: "adb", purpose: "devices" })
 				.split("\n")
 				.map(line => line.trim())
 				.filter(line => line !== "")
@@ -604,7 +603,7 @@ export class AndroidDeviceManager {
 				name: this.getDeviceName(deviceId),
 			}));
 		} catch (error) {
-			console.error("Could not execute adb command, maybe ANDROID_HOME is not set?");
+			warn("Could not execute adb command, maybe ANDROID_HOME is not set?");
 			return [];
 		}
 	}

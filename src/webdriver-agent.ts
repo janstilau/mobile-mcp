@@ -1,4 +1,5 @@
 import { ActionableError, SwipeDirection, ScreenSize, ScreenElement, Orientation } from "./robot";
+import { fetchLogged } from "./http";
 
 export interface SourceTreeElementRect {
 	x: number;
@@ -30,7 +31,7 @@ export class WebDriverAgent {
 	public async isRunning(): Promise<boolean> {
 		const url = `http://${this.host}:${this.port}/status`;
 		try {
-			const response = await fetch(url);
+			const response = await fetchLogged(url, undefined, { label: "wda", purpose: "status" });
 			const json = await response.json();
 			return response.status === 200 && json.value?.ready === true;
 		} catch (error) {
@@ -41,13 +42,13 @@ export class WebDriverAgent {
 
 	public async createSession(): Promise<string> {
 		const url = `http://${this.host}:${this.port}/session`;
-		const response = await fetch(url, {
+		const response = await fetchLogged(url, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ capabilities: { alwaysMatch: { platformName: "iOS" } } }),
-		});
+		}, { label: "wda", purpose: "createSession" });
 
 		if (!response.ok) {
 			const errorText = await response.text();
@@ -64,7 +65,7 @@ export class WebDriverAgent {
 
 	public async deleteSession(sessionId: string) {
 		const url = `http://${this.host}:${this.port}/session/${sessionId}`;
-		const response = await fetch(url, { method: "DELETE" });
+		const response = await fetchLogged(url, { method: "DELETE" }, { label: "wda", purpose: "deleteSession" });
 		return response.json();
 	}
 
@@ -79,7 +80,7 @@ export class WebDriverAgent {
 	public async getScreenSize(sessionUrl?: string): Promise<ScreenSize> {
 		if (sessionUrl) {
 			const url = `${sessionUrl}/wda/screen`;
-			const response = await fetch(url);
+			const response = await fetchLogged(url, undefined, { label: "wda", purpose: "getScreenSize" });
 			const json = await response.json();
 			return {
 				width: json.value.screenSize.width,
@@ -89,7 +90,7 @@ export class WebDriverAgent {
 		} else {
 			return this.withinSession(async sessionUrlInner => {
 				const url = `${sessionUrlInner}/wda/screen`;
-				const response = await fetch(url);
+				const response = await fetchLogged(url, undefined, { label: "wda", purpose: "getScreenSize" });
 				const json = await response.json();
 				return {
 					width: json.value.screenSize.width,
@@ -103,13 +104,13 @@ export class WebDriverAgent {
 	public async sendKeys(keys: string) {
 		await this.withinSession(async sessionUrl => {
 			const url = `${sessionUrl}/wda/keys`;
-			await fetch(url, {
+			await fetchLogged(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify({ value: [keys] }),
-			});
+			}, { label: "wda", purpose: "keys" });
 		});
 	}
 
@@ -132,7 +133,7 @@ export class WebDriverAgent {
 
 		await this.withinSession(async sessionUrl => {
 			const url = `${sessionUrl}/wda/pressButton`;
-			const response = await fetch(url, {
+			const response = await fetchLogged(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -140,7 +141,7 @@ export class WebDriverAgent {
 				body: JSON.stringify({
 					name: button,
 				}),
-			});
+			}, { label: "wda", purpose: "pressButton" });
 
 			return response.json();
 		});
@@ -149,7 +150,7 @@ export class WebDriverAgent {
 	public async tap(x: number, y: number) {
 		await this.withinSession(async sessionUrl => {
 			const url = `${sessionUrl}/actions`;
-			await fetch(url, {
+			await fetchLogged(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -169,14 +170,14 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			});
+			}, { label: "wda", purpose: "tap" });
 		});
 	}
 
 	public async doubleTap(x: number, y: number) {
 		await this.withinSession(async sessionUrl => {
 			const url = `${sessionUrl}/actions`;
-			await fetch(url, {
+			await fetchLogged(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -202,14 +203,14 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			});
+			}, { label: "wda", purpose: "doubleTap" });
 		});
 	}
 
 	public async longPress(x: number, y: number, duration: number) {
 		await this.withinSession(async sessionUrl => {
 			const url = `${sessionUrl}/actions`;
-			await fetch(url, {
+			await fetchLogged(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -229,7 +230,7 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			});
+			}, { label: "wda", purpose: "longPress" });
 		});
 	}
 
@@ -273,7 +274,7 @@ export class WebDriverAgent {
 
 	public async getPageSource(): Promise<SourceTree> {
 		const url = `http://${this.host}:${this.port}/source/?format=json`;
-		const response = await fetch(url);
+		const response = await fetchLogged(url, undefined, { label: "wda", purpose: "pageSource" });
 		const json = await response.json();
 		return json as SourceTree;
 	}
@@ -285,16 +286,16 @@ export class WebDriverAgent {
 
 	public async openUrl(url: string): Promise<void> {
 		await this.withinSession(async sessionUrl => {
-			await fetch(`${sessionUrl}/url`, {
+			await fetchLogged(`${sessionUrl}/url`, {
 				method: "POST",
 				body: JSON.stringify({ url }),
-			});
+			}, { label: "wda", purpose: "openUrl" });
 		});
 	}
 
 	public async getScreenshot(): Promise<Buffer> {
 		const url = `http://${this.host}:${this.port}/screenshot`;
-		const response = await fetch(url);
+		const response = await fetchLogged(url, undefined, { label: "wda", purpose: "screenshot" });
 		const json = await response.json();
 		return Buffer.from(json.value, "base64");
 	}
@@ -335,7 +336,7 @@ export class WebDriverAgent {
 			}
 
 			const url = `${sessionUrl}/actions`;
-			const response = await fetch(url, {
+			const response = await fetchLogged(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -355,7 +356,7 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			});
+			}, { label: "wda", purpose: "swipe(actions)" });
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -363,9 +364,9 @@ export class WebDriverAgent {
 			}
 
 			// Clear actions to ensure they complete
-			await fetch(`${sessionUrl}/actions`, {
+			await fetchLogged(`${sessionUrl}/actions`, {
 				method: "DELETE",
-			});
+			}, { label: "wda", purpose: "swipe(actions:clear)" });
 		});
 	}
 
@@ -396,7 +397,7 @@ export class WebDriverAgent {
 			}
 
 			const url = `${sessionUrl}/actions`;
-			const response = await fetch(url, {
+			const response = await fetchLogged(url, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -416,7 +417,7 @@ export class WebDriverAgent {
 						}
 					]
 				}),
-			});
+			}, { label: "wda", purpose: "swipeFromCoordinate(actions)" });
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -424,29 +425,29 @@ export class WebDriverAgent {
 			}
 
 			// Clear actions to ensure they complete
-			await fetch(`${sessionUrl}/actions`, {
+			await fetchLogged(`${sessionUrl}/actions`, {
 				method: "DELETE",
-			});
+			}, { label: "wda", purpose: "swipeFromCoordinate(actions:clear)" });
 		});
 	}
 
 	public async setOrientation(orientation: Orientation): Promise<void> {
 		await this.withinSession(async sessionUrl => {
 			const url = `${sessionUrl}/orientation`;
-			await fetch(url, {
+			await fetchLogged(url, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					orientation: orientation.toUpperCase()
 				})
-			});
+			}, { label: "wda", purpose: "setOrientation" });
 		});
 	}
 
 	public async getOrientation(): Promise<Orientation> {
 		return this.withinSession(async sessionUrl => {
 			const url = `${sessionUrl}/orientation`;
-			const response = await fetch(url);
+			const response = await fetchLogged(url, undefined, { label: "wda", purpose: "getOrientation" });
 			const json = await response.json();
 			return json.value.toLowerCase() as Orientation;
 		});

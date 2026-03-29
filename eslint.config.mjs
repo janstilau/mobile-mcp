@@ -153,6 +153,13 @@ const languageOptions = {
 
 export default [
 	{
+		ignores: [
+			"lib/**",
+			"node_modules/**",
+			"tmp/**",
+		],
+	},
+	{
 		files: ["**/*.ts"],
 		plugins,
 		languageOptions,

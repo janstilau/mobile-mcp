@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
-import { execFileSync, spawn, ChildProcess } from "node:child_process";
+import { ChildProcess } from "node:child_process";
+import { execBuffer, execText, spawnLogged } from "./cmd";
 
 export interface MobilecliDevicesOptions {
 	includeOffline?: boolean;
@@ -38,23 +39,22 @@ export class Mobilecli {
 
 	public executeCommand(args: string[]): string {
 		const path = this.getPath();
-		return execFileSync(path, args, { encoding: "utf8" }).toString().trim();
+		return execText(path, args, { encoding: "utf8" }, { label: "mobilecli", purpose: args.join(" ") }).toString().trim();
 	}
 
 	public spawnCommand(args: string[]): ChildProcess {
 		const binaryPath = this.getPath();
-		return spawn(binaryPath, args, {
+		return spawnLogged(binaryPath, args, {
 			stdio: ["ignore", "ignore", "ignore"],
-		});
+		}, { label: "mobilecli", purpose: args.join(" ") });
 	}
 
 	public executeCommandBuffer(args: string[]): Buffer {
 		const path = this.getPath();
-		return execFileSync(path, args, {
-			encoding: "buffer",
+		return execBuffer(path, args, {
 			maxBuffer: MAX_BUFFER_SIZE,
 			timeout: TIMEOUT,
-		}) as Buffer;
+		}, { label: "mobilecli", purpose: args.join(" ") });
 	}
 
 	private static getMobilecliPath(): string {

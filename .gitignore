@@ -3,3 +3,6 @@ node_modules
 lib
 .nyc_output
 .vscode
+mobile-mcp/logs
+mobile-mcp/logs/**
+*.log

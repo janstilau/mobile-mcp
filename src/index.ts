@@ -2,9 +2,33 @@
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createMcpServer, getAgentVersion } from "./server";
-import { error } from "./logger";
+import { error, info, shouldLogData, shouldLogMcp, shouldLogMcpRaw, logValue } from "./logger";
 import express from "express";
 import { program } from "commander";
+
+const instrumentTransport = (transport: any) => {
+	if (!shouldLogMcp() && !shouldLogMcpRaw()) {return;}
+
+	const prevOnMessage = transport.onmessage?.bind(transport);
+	transport.onmessage = (message: any) => {
+		info("mcp.in", {
+			message: shouldLogMcpRaw() ? message : { type: message?.type, id: message?.id, method: message?.method },
+			raw: shouldLogData() ? logValue(message) : undefined,
+		});
+		prevOnMessage?.(message);
+	};
+
+	const prevSend = transport.send?.bind(transport);
+	if (prevSend) {
+		transport.send = async (message: any) => {
+			info("mcp.out", {
+				message: shouldLogMcpRaw() ? message : { type: message?.type, id: message?.id, method: message?.method },
+				raw: shouldLogData() ? logValue(message) : undefined,
+			});
+			return await prevSend(message);
+		};
+	}
+};
 
 const startSseServer = async (port: number) => {
 	const app = express();
@@ -24,6 +48,7 @@ const startSseServer = async (port: number) => {
 		}
 
 		transport = new SSEServerTransport("/mcp", res);
+		instrumentTransport(transport);
 		server.connect(transport);
 	});
 
@@ -38,6 +63,7 @@ const startStdioServer = async () => {
 
 		const server = createMcpServer();
 		await server.connect(transport);
+		instrumentTransport(transport);
 
 		error("mobile-mcp server running on stdio");
 	} catch (err: any) {

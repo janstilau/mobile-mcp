@@ -212,6 +212,52 @@ For more information, see the Codex MCP documentation.
 
 </details>
 
+## 🔎 Verbose logging (debugging)
+
+Mobile MCP can write logs to **stderr** (so MCP stdout stays clean). It can also write logs to files (recommended for deep debugging).
+
+### Default (no Codex `--env` needed)
+
+This repo includes `/mobile-mcp/config.json`, which enables verbose logging by default and writes logs to `/mobile-mcp/logs/`:
+
+- Global log: rotated every 10 minutes, keeping 6 files (≈ last hour)
+- Per tool call log: additionally mirrors logs into `/mobile-mcp/logs/traces/` using the MCP `requestId` as `traceId`
+
+### Quick start (everything on)
+
+Set `MOBILE_MCP_DEBUG=1` to enable a full end-to-end trace:
+
+- Tool invocation start/end (`tools/call` handlers)
+- All CLI calls (e.g. `adb`, `ios`/go-ios, `xcrun simctl`, `plutil`, `unzip`, `sips`, `magick`, `mobilecli`) including exit status + raw stdout/stderr (truncated by default)
+- WebDriverAgent HTTP requests/responses (including bodies)
+- Optional MCP message logging on stdin/stdout
+
+Also set `MOBILE_MCP_LOG_FILE=/path/to/mobile-mcp.log` (or `LOG_FILE=...`) to persist logs.
+
+### Useful environment variables
+
+- `MOBILE_MCP_DEBUG=1` – enable all categories at `trace` level
+- `MOBILE_MCP_LOG_LEVEL=trace|debug|info|warn|error`
+- `MOBILE_MCP_LOG_FORMAT=text|json`
+- `MOBILE_MCP_LOG_FILE=/path/to/file` (or `LOG_FILE=...`)
+- `MOBILE_MCP_LOG_TRUNCATE=0` and `MOBILE_MCP_LOG_MAX_CHARS=50000`
+- `MOBILE_MCP_LOG_DATA=1` – log raw payloads (tool args/results, CLI stdout/stderr, HTTP bodies)
+- `MOBILE_MCP_LOG_COMMANDS=1`, `MOBILE_MCP_LOG_HTTP=1`
+- `MOBILE_MCP_LOG_MCP=1`, `MOBILE_MCP_LOG_MCP_RAW=1` – log incoming/outgoing MCP messages
+- `MOBILE_MCP_CONFIG_PATH=/path/to/config.json` – override config path
+- `MOBILE_MCP_LOG_DIR=/path/to/logs` – override log directory (used for rotation/splitting)
+- `MOBILE_MCP_LOG_SPLIT_MODE=time|trace|time+trace`
+- `MOBILE_MCP_LOG_ROTATE_MINUTES=10`, `MOBILE_MCP_LOG_RETAIN_GLOBAL=6`, `MOBILE_MCP_LOG_RETAIN_TRACE=200`
+
+### Codex example
+
+```bash
+codex mcp add mobile-mcp \
+  --env MOBILE_MCP_DEBUG=1 \
+  --env MOBILE_MCP_LOG_FILE=/tmp/mobile-mcp.log \
+  -- node /absolute/path/to/mobile-mcp/lib/index.js
+```
+
 <details>
 <summary>Copilot</summary>
 

@@ -1,0 +1,33 @@
+{
+  "logging": {
+    "enabled": true,
+    "level": "trace",
+    "format": "json",
+    "outputs": {
+      "file": true,
+      "stderr": false
+    },
+    "truncate": {
+      "enabled": true,
+      "maxChars": 50000
+    },
+    "categories": {
+      "commands": true,
+      "http": true,
+      "mcp": true,
+      "mcpRaw": true,
+      "data": true,
+      "callsite": false
+    },
+    "split": {
+      "mode": "time+trace"
+    },
+    "files": {
+      "dir": "logs",
+      "prefix": "mobile-mcp",
+      "rotateMinutes": 10,
+      "retainGlobalFiles": 6,
+      "retainTraceFiles": 200
+    }
+  }
+}

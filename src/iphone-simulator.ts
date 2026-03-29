@@ -1,9 +1,9 @@
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename, extname } from "node:path";
 
 import { trace } from "./logger";
+import { execBuffer, execText } from "./cmd";
 import { WebDriverAgent } from "./webdriver-agent";
 import { ActionableError, Button, InstalledApp, Robot, ScreenElement, ScreenSize, SwipeDirection, Orientation } from "./robot";
 import { validatePackageName, validateLocale } from "./utils";
@@ -84,10 +84,10 @@ export class Simctl implements Robot {
 	}
 
 	private simctl(...args: string[]): Buffer {
-		return execFileSync("xcrun", ["simctl", ...args], {
+		return execBuffer("xcrun", ["simctl", ...args], {
 			timeout: TIMEOUT,
 			maxBuffer: MAX_BUFFER_SIZE,
-		});
+		}, { label: "xcrun", purpose: `simctl ${args[0] ?? ""}`.trim() });
 	}
 
 	public async getScreenshot(): Promise<Buffer> {
@@ -133,10 +133,10 @@ export class Simctl implements Robot {
 	}
 
 	private validateZipPaths(zipPath: string): void {
-		const output = execFileSync("/usr/bin/zipinfo", ["-1", zipPath], {
+		const output = execText("/usr/bin/zipinfo", ["-1", zipPath], {
 			timeout: TIMEOUT,
 			maxBuffer: MAX_BUFFER_SIZE,
-		}).toString();
+		}, { label: "zipinfo", purpose: "validate zip paths" });
 
 		const invalidPath = output
 			.split("\n")
@@ -164,9 +164,9 @@ export class Simctl implements Robot {
 				tempDir = mkdtempSync(join(tmpdir(), "ios-app-"));
 
 				try {
-					execFileSync("unzip", ["-q", path, "-d", tempDir], {
+					execText("unzip", ["-q", path, "-d", tempDir], {
 						timeout: TIMEOUT,
-					});
+					}, { label: "unzip", purpose: "extract app zip" });
 				} catch (error: any) {
 					throw new ActionableError(`Failed to unzip file: ${error.message}`);
 				}
@@ -215,9 +215,9 @@ export class Simctl implements Robot {
 
 	public async listApps(): Promise<InstalledApp[]> {
 		const text = this.simctl("listapps", this.simulatorUuid).toString();
-		const result = execFileSync("plutil", ["-convert", "json", "-o", "-", "-r", "-"], {
+		const result = execBuffer("plutil", ["-convert", "json", "-o", "-", "-r", "-"], {
 			input: text,
-		});
+		}, { label: "plutil", purpose: "plist->json" });
 
 		const output = JSON.parse(result.toString()) as Record<string, AppInfo>;
 		return Object.values(output).map(app => ({
