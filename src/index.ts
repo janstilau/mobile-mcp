@@ -69,7 +69,15 @@ const startSseServer = async (port: number) => {
 	});
 
 	app.listen(port, () => {
-		info("server.listen", { intent: "启动 SSE MCP 服务", port, url: `http://localhost:${port}/mcp` });
+		const argv = process.argv.slice(2).join(" ");
+		info("server.listen", {
+			intent: "启动 SSE MCP 服务",
+			cmd: `node ${process.argv[1]}${argv ? ` ${argv}` : ""}`,
+			cwd: process.cwd(),
+			payload: { execPath: process.execPath, script: __filename },
+			port,
+			url: `http://localhost:${port}/mcp`,
+		});
 	});
 };
 
@@ -81,7 +89,13 @@ const startStdioServer = async () => {
 		await server.connect(transport);
 		instrumentTransport(transport);
 
-		info("server.listen", { intent: "启动 stdio MCP 服务" });
+		const argv = process.argv.slice(2).join(" ");
+		info("server.listen", {
+			intent: "启动 stdio MCP 服务",
+			cmd: `node ${process.argv[1]}${argv ? ` ${argv}` : ""}`,
+			cwd: process.cwd(),
+			payload: { execPath: process.execPath, script: __filename },
+		});
 	} catch (err: any) {
 		console.error("Fatal error in main():", err);
 		error("Fatal error in main(): " + JSON.stringify(err.stack));
