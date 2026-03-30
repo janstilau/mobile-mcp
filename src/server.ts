@@ -7,14 +7,16 @@ import crypto from "node:crypto";
 import { ChildProcess } from "node:child_process";
 
 import { error, trace } from "./logger";
-import { AndroidRobot, AndroidDeviceManager } from "./android";
-import { ActionableError, Robot } from "./robot";
-import { IosManager, IosRobot } from "./ios";
+import { ActionableError } from "./robot";
 import { PNG } from "./png";
 import { isScalingAvailable, Image } from "./image-utils";
-import { Mobilecli } from "./mobilecli";
-import { MobileDevice } from "./mobile-device";
 import { validateOutputPath, validateFileExtension } from "./utils";
+import {
+	getRobotFromDevice,
+	listAvailableDevices,
+	ensureMobilecliAvailable,
+	mobilecli,
+} from "./device-manager";
 
 const ALLOWED_SCREENSHOT_EXTENSIONS = [".png", ".jpg", ".jpeg"];
 const ALLOWED_RECORDING_EXTENSIONS = [".mp4"];
@@ -141,59 +143,8 @@ export const createMcpServer = (): McpServer => {
 		}
 	};
 
-	const mobilecli = new Mobilecli();
 	const activeRecordings = new Map<string, ActiveRecording>();
 	posthog("launch", {}).then();
-
-	const ensureMobilecliAvailable = (): void => {
-		try {
-			const version = mobilecli.getVersion();
-			if (version.startsWith("failed")) {
-				throw new Error("mobilecli version check failed");
-			}
-		} catch (error: any) {
-			throw new ActionableError(`mobilecli is not available or not working properly. Please review the documentation at https://github.com/mobile-next/mobile-mcp/wiki for installation instructions`);
-		}
-	};
-
-	const getRobotFromDevice = (deviceId: string): Robot => {
-
-		// from now on, we must have mobilecli working
-		ensureMobilecliAvailable();
-
-		// Check if it's an iOS device
-		const iosManager = new IosManager();
-		const iosDevices = iosManager.listDevices();
-		const iosDevice = iosDevices.find(d => d.deviceId === deviceId);
-		if (iosDevice) {
-			return new IosRobot(deviceId);
-		}
-
-		// Check if it's an Android device
-		const androidManager = new AndroidDeviceManager();
-		const androidDevices = androidManager.getConnectedDevices();
-		const androidDevice = androidDevices.find(d => d.deviceId === deviceId);
-		if (androidDevice) {
-			return new AndroidRobot(deviceId);
-		}
-
-		// Check if it's a simulator (will later replace all other device types as well)
-		const response = mobilecli.getDevices({
-			platform: "ios",
-			type: "simulator",
-			includeOffline: false,
-		});
-
-		if (response.status === "ok" && response.data && response.data.devices) {
-			for (const device of response.data.devices) {
-				if (device.id === deviceId) {
-					return new MobileDevice(deviceId);
-				}
-			}
-		}
-
-		throw new ActionableError(`Device "${deviceId}" not found. Use the mobile_list_available_devices tool to see available devices.`);
-	};
 
 	tool(
 		"mobile_list_available_devices",
@@ -202,63 +153,7 @@ export const createMcpServer = (): McpServer => {
 		{},
 		{ readOnlyHint: true },
 		async ({}) => {
-
-			// from today onward, we must have mobilecli working
-			ensureMobilecliAvailable();
-
-			const iosManager = new IosManager();
-			const androidManager = new AndroidDeviceManager();
-			const devices: MobilecliDevice[] = [];
-
-			// Get Android devices with details
-			const androidDevices = androidManager.getConnectedDevicesWithDetails();
-			for (const device of androidDevices) {
-				devices.push({
-					id: device.deviceId,
-					name: device.name,
-					platform: "android",
-					type: "emulator",
-					version: device.version,
-					state: "online",
-				});
-			}
-
-			// Get iOS physical devices with details
-			try {
-				const iosDevices = iosManager.listDevicesWithDetails();
-				for (const device of iosDevices) {
-					devices.push({
-						id: device.deviceId,
-						name: device.deviceName,
-						platform: "ios",
-						type: "real",
-						version: device.version,
-						state: "online",
-					});
-				}
-			} catch (error: any) {
-				// If go-ios is not available, silently skip
-			}
-
-			// Get iOS simulators from mobilecli (excluding offline devices)
-			const response = mobilecli.getDevices({
-				platform: "ios",
-				type: "simulator",
-				includeOffline: false,
-			});
-			if (response.status === "ok" && response.data && response.data.devices) {
-				for (const device of response.data.devices) {
-					devices.push({
-						id: device.id,
-						name: device.name,
-						platform: device.platform,
-						type: device.type,
-						version: device.version,
-						state: "online",
-					});
-				}
-			}
-
+			const devices = listAvailableDevices().map(d => ({ ...d, state: "online" as const }));
 			const out: MobilecliDevicesResponse = { devices };
 			return JSON.stringify(out);
 		}
