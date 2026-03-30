@@ -12,7 +12,8 @@
   },
   "license": "Apache-2.0",
   "scripts": {
-    "build": "tsc && chmod +x lib/index.js",
+    "build": "tsc && chmod +x lib/index.js && chmod +x lib/agent.js",
+    "agent": "ts-node src/agent.ts",
     "lint": "eslint .",
     "fixlint": "eslint . --fix",
     "test": "nyc mocha --require ts-node/register test/*.ts",
@@ -27,8 +28,10 @@
     "@modelcontextprotocol/sdk": "1.26.0",
     "ajv": "^8.18.0",
     "commander": "14.0.0",
+    "dotenv": "^17.3.1",
     "express": "5.1.0",
     "fast-xml-parser": "5.5.7",
+    "openai": "^6.33.0",
     "qs": "^6.15.0",
     "zod": "^4.1.13",
     "zod-to-json-schema": "3.25.0"
@@ -59,7 +62,8 @@
   },
   "main": "index.js",
   "bin": {
-    "mcp-server-mobile": "lib/index.js"
+    "mcp-server-mobile": "lib/index.js",
+    "mobile-mcp-agent": "lib/agent.js"
   },
   "directories": {
     "lib": "lib"
