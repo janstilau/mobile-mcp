@@ -807,10 +807,27 @@ async function runAgent(config: AgentConfig): Promise<void> {
 	let consecutiveEmptySteps = 0;
 	const MAX_EMPTY_STEPS = 3;
 
-	// 初始对话历史：系统提示词 + 用户任务描述
+	// 用于检测重复动作，防止模型陷入无限循环（如无限 swipe left）
+	const recentActions: string[] = [];
+	const MAX_REPEATED_ACTION = 4;
+
+	// 启动前先截图，让模型了解当前屏幕状态
+	console.log(`  [init] Taking initial screenshot...`);
+	const initScreenshot = await captureScreenshot(robot);
+	const initUserContent: OpenAI.ChatCompletionContentPart[] = [
+		{ type: "text" as const, text: config.task },
+	];
+	if (initScreenshot) {
+		initUserContent.push({
+			type: "image_url" as const,
+			image_url: { url: `data:${initScreenshot.mimeType};base64,${initScreenshot.data}` },
+		});
+	}
+
+	// 初始对话历史：系统提示词 + 用户任务描述（含初始截图）
 	let messages: OpenAI.ChatCompletionMessageParam[] = [
 		{ role: "system", content: config.systemPrompt || DEFAULT_SYSTEM_PROMPT },
-		{ role: "user", content: config.task },
+		{ role: "user", content: initUserContent },
 	];
 
 	for (let step = 1; step <= config.maxSteps; step++) {
@@ -844,11 +861,30 @@ async function runAgent(config: AgentConfig): Promise<void> {
 			for (const tc of message.tool_calls) {
 				if (tc.type !== "function") {continue;}
 
+				// 过滤无效工具名（防止模型返回 undefined/空名称）
+				if (!tc.function.name) {
+					console.log(`  [skip] Tool call with empty/undefined function name, ignoring.`);
+					messages.push({ role: "tool", tool_call_id: tc.id, content: `Error: tool name is empty or undefined. Please call a valid tool.` });
+					continue;
+				}
+
 				let fnArgs: any = {};
 				try {
 					fnArgs = JSON.parse(tc.function.arguments || "{}");
 				} catch (e) {
 					messages.push({ role: "tool", tool_call_id: tc.id, content: `Error: malformed arguments: ${tc.function.arguments}` });
+					continue;
+				}
+
+				// 检测重复动作，防止无限循环
+				const actionKey = `${tc.function.name}(${JSON.stringify(fnArgs)})`;
+				recentActions.push(actionKey);
+				if (recentActions.length > MAX_REPEATED_ACTION) {recentActions.shift();}
+				if (recentActions.length === MAX_REPEATED_ACTION && recentActions.every(a => a === actionKey)) {
+					const loopWarning = `You have repeated the same action "${actionKey}" ${MAX_REPEATED_ACTION} times in a row without progress. Stop and try a different approach (e.g., use launch_app to open the app directly, or navigate back first).`;
+					console.log(`  [loop] ${loopWarning}`);
+					messages.push({ role: "tool", tool_call_id: tc.id, content: loopWarning });
+					recentActions.length = 0;
 					continue;
 				}
 
@@ -956,6 +992,18 @@ async function runAgent(config: AgentConfig): Promise<void> {
 			const msg = `Could not resolve action "${firstCall.tool}" with parameter "${firstCall.args.__raw__ || ""}"`;
 			console.log(`       -> [SKIP] ${msg}`);
 			messages.push({ role: "user", content: `[Error] ${msg}. Please try a different approach.` });
+			continue;
+		}
+
+		// 检测重复动作，防止无限循环
+		const actionKey = `${resolved.tool}(${JSON.stringify(resolved.args)})`;
+		recentActions.push(actionKey);
+		if (recentActions.length > MAX_REPEATED_ACTION) {recentActions.shift();}
+		if (recentActions.length === MAX_REPEATED_ACTION && recentActions.every(a => a === actionKey)) {
+			const loopWarning = `You have repeated the same action "${actionKey}" ${MAX_REPEATED_ACTION} times in a row without progress. Stop and try a different approach (e.g., use launch_app to open the app directly, or navigate back first).`;
+			console.log(`  [loop] ${loopWarning}`);
+			messages.push({ role: "user", content: loopWarning });
+			recentActions.length = 0;
 			continue;
 		}
 

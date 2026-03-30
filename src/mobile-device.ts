@@ -197,7 +197,15 @@ export class MobileDevice implements Robot {
 	}
 
 	public async getElementsOnScreen(): Promise<ScreenElement[]> {
-		const response = JSON.parse(this.runCommand(["dump", "ui"])) as DumpUIResponse;
+		let response: DumpUIResponse;
+		try {
+			response = JSON.parse(this.runCommand(["dump", "ui"])) as DumpUIResponse;
+		} catch (e) {
+			throw new Error(`dump ui returned invalid JSON: ${e}`);
+		}
+		if (!response?.data?.elements) {
+			throw new Error(`dump ui returned unexpected response: ${JSON.stringify(response)}`);
+		}
 		return response.data.elements.map(element => ({
 			type: element.type,
 			label: element.label,
