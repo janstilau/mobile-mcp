@@ -55,6 +55,62 @@ type ToolResult =
 	| { type: "text"; text: string }
 	| { type: "image"; text: string; imageBase64: string; mimeType: string };
 
+function extractTaggedNumber(raw: string, key: string): number | null {
+	const pattern = new RegExp(`<arg_key>\\s*${key}\\s*</arg_key>\\s*<arg_value>\\s*(-?\\d+(?:\\.\\d+)?)`, "i");
+	const match = raw.match(pattern);
+	if (!match) {
+		return null;
+	}
+	const value = Number(match[1]);
+	return Number.isFinite(value) ? value : null;
+}
+
+function extractFirstNumber(raw: string): number | null {
+	const match = raw.match(/-?\d+(?:\.\d+)?/);
+	if (!match) {
+		return null;
+	}
+	const value = Number(match[0]);
+	return Number.isFinite(value) ? value : null;
+}
+
+function coerceNumericArg(rawValue: unknown, key: string, allArgs: Record<string, unknown>): number | null {
+	if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+		return rawValue;
+	}
+
+	if (typeof rawValue === "string") {
+		const tagged = extractTaggedNumber(rawValue, key);
+		if (tagged !== null) {
+			return tagged;
+		}
+		const first = extractFirstNumber(rawValue);
+		if (first !== null) {
+			return first;
+		}
+	}
+
+	if (rawValue !== undefined && rawValue !== null) {
+		const coerced = Number(rawValue);
+		if (Number.isFinite(coerced)) {
+			return coerced;
+		}
+	}
+
+	const serializedArgs = JSON.stringify(allArgs ?? {});
+	const taggedFromPayload = extractTaggedNumber(serializedArgs, key);
+	return taggedFromPayload !== null ? taggedFromPayload : null;
+}
+
+function requiredCoordinateArgs(args: Record<string, unknown>, toolName: string): { x: number; y: number } {
+	const x = coerceNumericArg(args.x, "x", args);
+	const y = coerceNumericArg(args.y, "y", args);
+	if (x === null || y === null) {
+		throw new Error(`Invalid ${toolName} coordinates: ${JSON.stringify(args)}. Use numeric x/y or call list_elements_on_screen first.`);
+	}
+	return { x, y };
+}
+
 const DEFAULT_SYSTEM_PROMPT = `You are a mobile app end-to-end testing agent. You execute test tasks on a real device and report structured findings based strictly on observed screen evidence.
 
 ## Role
@@ -63,6 +119,7 @@ You do NOT fix bugs. You do NOT guess what should happen. You only report what y
 
 ## Tool Usage Policy
 - Prefer listing screen elements (accessibility tree) over taking screenshots for locating elements — it is faster and more reliable.
+- Before any coordinate tap/long-press/double-tap, call list_elements_on_screen first and derive the element center from that output (unless coordinates were explicitly provided by the user).
 - Use screenshots only when you need to visually verify UI rendering (layout, images, visual glitches).
 - Always observe the screen after each action to verify the result before proceeding.
 
@@ -372,18 +429,24 @@ async function executeTool(robot: Robot, name: string, args: any): Promise<ToolR
 			return { type: "text", text: `Screen size: ${size.width}x${size.height} pixels (scale: ${size.scale})` };
 		}
 		case "tap": {
-			await robot.tap(args.x, args.y);
-			return { type: "text", text: `Tapped at (${args.x}, ${args.y})` };
+			const normalizedArgs = (args && typeof args === "object") ? args as Record<string, unknown> : {};
+			const { x, y } = requiredCoordinateArgs(normalizedArgs, "tap");
+			await robot.tap(x, y);
+			return { type: "text", text: `Tapped at (${x}, ${y})` };
 		}
 		case "double_tap": {
-			await robot.doubleTap(args.x, args.y);
-			return { type: "text", text: `Double-tapped at (${args.x}, ${args.y})` };
+			const normalizedArgs = (args && typeof args === "object") ? args as Record<string, unknown> : {};
+			const { x, y } = requiredCoordinateArgs(normalizedArgs, "double_tap");
+			await robot.doubleTap(x, y);
+			return { type: "text", text: `Double-tapped at (${x}, ${y})` };
 		}
 		case "long_press": {
+			const normalizedArgs = (args && typeof args === "object") ? args as Record<string, unknown> : {};
+			const { x, y } = requiredCoordinateArgs(normalizedArgs, "long_press");
 			// 未提供 duration 时使用默认值 500ms
-			const duration = args.duration ?? 500;
-			await robot.longPress(args.x, args.y, duration);
-			return { type: "text", text: `Long pressed at (${args.x}, ${args.y}) for ${duration}ms` };
+			const duration = coerceNumericArg(normalizedArgs.duration, "duration", normalizedArgs) ?? 500;
+			await robot.longPress(x, y, duration);
+			return { type: "text", text: `Long pressed at (${x}, ${y}) for ${duration}ms` };
 		}
 		case "list_elements_on_screen": {
 			const elements = await robot.getElementsOnScreen();
@@ -410,10 +473,13 @@ async function executeTool(robot: Robot, name: string, args: any): Promise<ToolR
 			return { type: "text", text: `Opened URL: ${args.url}` };
 		}
 		case "swipe": {
+			const normalizedArgs = (args && typeof args === "object") ? args as Record<string, unknown> : {};
 			// 如果提供了起始坐标，则从指定位置开始滑动；否则从屏幕中心滑动
-			if (args.x !== undefined && args.y !== undefined) {
-				await robot.swipeFromCoordinate(args.x, args.y, args.direction, args.distance);
-				return { type: "text", text: `Swiped ${args.direction} from (${args.x}, ${args.y})` };
+			if (normalizedArgs.x !== undefined || normalizedArgs.y !== undefined) {
+				const { x, y } = requiredCoordinateArgs(normalizedArgs, "swipe");
+				const distance = coerceNumericArg(normalizedArgs.distance, "distance", normalizedArgs) ?? undefined;
+				await robot.swipeFromCoordinate(x, y, args.direction, distance);
+				return { type: "text", text: `Swiped ${args.direction} from (${x}, ${y})` };
 			}
 			await robot.swipe(args.direction);
 			return { type: "text", text: `Swiped ${args.direction}` };

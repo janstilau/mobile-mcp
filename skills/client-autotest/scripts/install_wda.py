@@ -75,7 +75,7 @@ def main():
     # 2. 安装 WDA 到设备
     print(f"[wda] 安装 WebDriverAgent 到设备 {device_udid} ...")
     subprocess.run(
-        ["ios", "install", "--bundle", str(WDA_IPA), "--udid", device_udid], check=True)
+        ["ios", "install", "--path", str(WDA_IPA), "--udid", device_udid], check=True)
     print("[wda] 安装完成")
 
     # 3. 端口转发（幂等处理，避免重复拉起后台进程）

@@ -40,11 +40,23 @@ def get_connected_devices() -> list[dict]:
         return []
     try:
         data = json.loads(raw)
-        # go-ios 输出格式：[{"udid": "...", ...}, ...]  或  {"deviceList": [...]}
+        # go-ios 输出格式可能是：
+        # 1) [{"udid": "...", ...}, ...]
+        # 2) {"deviceList": [{"udid": "...", ...}, ...]}
+        # 3) {"deviceList": ["<udid>", ...]}
+        def normalize_items(items):
+            normalized = []
+            for item in items:
+                if isinstance(item, dict):
+                    normalized.append(item)
+                elif isinstance(item, str) and item.strip():
+                    normalized.append({"udid": item.strip()})
+            return normalized
+
         if isinstance(data, list):
-            return data
-        if isinstance(data, dict) and "deviceList" in data:
-            return data["deviceList"]
+            return normalize_items(data)
+        if isinstance(data, dict) and "deviceList" in data and isinstance(data["deviceList"], list):
+            return normalize_items(data["deviceList"])
     except json.JSONDecodeError:
         # 兼容极少数旧版本纯文本输出（每行第一列为 UDID）
         devices = []

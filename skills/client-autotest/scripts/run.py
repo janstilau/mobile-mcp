@@ -22,6 +22,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 AUTOTEST_CONFIG = ".autotest.yml"
+RESULT_ROOT_DIR = "iau_autotest"
 
 
 def _agent_script() -> Path:
@@ -159,6 +160,8 @@ def select_device() -> str:
 def run_single_task(device, bundle_id, task_desc, max_steps, log_file, label, summary_file) -> bool:
     print(f"\n[运行] {label}")
     print("-------")
+    print(f"[日志] 实时日志文件：{log_file}")
+    print(f"[日志] 可在新终端查看：tail -f {log_file}")
 
     effective_task = task_desc
     if bundle_id:
@@ -170,11 +173,13 @@ def run_single_task(device, bundle_id, task_desc, max_steps, log_file, label, su
            "--max-steps", str(max_steps)]
 
     start = datetime.now()
-    with open(log_file, "w") as f:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        for line in proc.stdout:
-            print(line, end="")
-            f.write(line)
+    with open(log_file, "w", buffering=1) as f:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                print(line, end="", flush=True)
+                f.write(line)
+                f.flush()
         proc.wait()
 
     elapsed = int((datetime.now() - start).total_seconds())
@@ -244,7 +249,7 @@ def main():
 
     subject = args.subject or git_root.name
     timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    result_dir = git_root / "ClientAutoTestResult" / f"{subject}_{timestamp}"
+    result_dir = git_root / RESULT_ROOT_DIR / f"{subject}_{timestamp}"
     result_dir.mkdir(parents=True, exist_ok=True)
 
     print()

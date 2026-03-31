@@ -12,7 +12,11 @@ description: Run automated mobile testing on iOS or Android devices. Use when th
 从用户描述中提取所需信息，**逐步提问，每次只问一个问题，等用户回答后再问下一个**，顺序如下：
 
 1. **任务**：若用户未说明要测什么，先问"你想测什么功能或场景？"，等待回答。
-2. **平台**：若用户未指定平台，再问"请问是在哪个平台上测试？（ios-simulator / ios-real / android）"，等待回答。
+2. **平台**：若用户未指定平台，必须给出固定候选列表并让用户选择，不要让用户自由输入。使用如下话术：
+   "请从以下平台中选择一个：
+   1) ios-simulator
+   2) ios-real
+   3) android"
 3. **bundle_id**（可选）：若用户未提供，可跳过——脚本会自动从 `.autotest.yml` 读取；交互式首次运行会询问并保存，非交互环境会直接跳过（建议显式传 `--bundle-id`）。
 
 > ⚠️ 切勿一次性列出所有问题，必须一问一答、依次推进。
@@ -64,5 +68,5 @@ python3 skills/client-autotest/scripts/run.py \
 ### 第三步：展示结果
 
 - 通过 / 失败数量
-- 结果目录：当前 git 根目录下 `ClientAutoTestResult/<subject>_<时间戳>/`
+- 结果目录：当前 git 根目录下 `iau_autotest/<subject>_<时间戳>/`
 - 如有失败，读取对应 `.log` 文件分析原因
