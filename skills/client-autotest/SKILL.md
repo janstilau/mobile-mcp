@@ -13,7 +13,7 @@ description: Run automated mobile testing on iOS or Android devices. Use when th
 
 1. **任务**：若用户未说明要测什么，先问"你想测什么功能或场景？"，等待回答。
 2. **平台**：若用户未指定平台，再问"请问是在哪个平台上测试？（ios-simulator / ios-real / android）"，等待回答。
-3. **bundle_id**（可选）：若用户未提供，可跳过——脚本会自动从 `.autotest.yml` 读取，首次运行时会交互式询问并保存。若用户主动提供则使用。
+3. **bundle_id**（可选）：若用户未提供，可跳过——脚本会自动从 `.autotest.yml` 读取；交互式首次运行会询问并保存，非交互环境会直接跳过（建议显式传 `--bundle-id`）。
 
 > ⚠️ 切勿一次性列出所有问题，必须一问一答、依次推进。
 
@@ -24,6 +24,10 @@ description: Run automated mobile testing on iOS or Android devices. Use when th
 2. 若未传 `--device`，列出设备并提示用户选择
 3. 平台专项检查（WDA、ADB 等）
 4. 读取 / 初始化 `.autotest.yml` 中的 bundle_id
+
+平台说明：
+- `ios-simulator` / `ios-real` 仅支持 macOS 主机
+- `android` 支持 macOS / Linux / Windows（需正确安装 adb）
 
 **自然语言任务（最常见，device 和 bundle-id 均可省略）：**
 ```bash

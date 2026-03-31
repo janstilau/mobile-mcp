@@ -68,6 +68,14 @@ def check_platform(platform: str, device: str = ""):
     subprocess.run(cmd, check=True)
 
 
+def ensure_host_os_supported(target_platform: str):
+    """按目标平台校验当前主机系统，给出更早、更明确的错误提示。"""
+    host_os = platform.system()
+    if target_platform in ("ios-simulator", "ios-real") and host_os != "Darwin":
+        print(f"错误：{target_platform} 仅支持在 macOS 主机上执行，当前系统为 {host_os}")
+        sys.exit(1)
+
+
 def load_bundle_id_from_config(git_root: Path) -> str:
     """从 .autotest.yml 读取 bundle_id，不存在则返回空字符串。"""
     config_file = git_root / AUTOTEST_CONFIG
@@ -101,9 +109,10 @@ def save_bundle_id_to_config(git_root: Path, bundle_id: str):
     print(f"[配置] 已保存到 {config_file}")
 
 
-def resolve_bundle_id(cli_bundle_id: str, git_root: Path) -> str:
+def resolve_bundle_id(cli_bundle_id: str, git_root: Path, allow_prompt: bool = True) -> str:
     """
-    优先级：命令行参数 > .autotest.yml > 交互式询问（并写入文件）
+    优先级：命令行参数 > .autotest.yml > 交互式询问（可选，且仅在允许时）
+    若不允许交互且未提供 bundle_id，则返回空字符串。
     """
     if cli_bundle_id:
         return cli_bundle_id
@@ -113,16 +122,20 @@ def resolve_bundle_id(cli_bundle_id: str, git_root: Path) -> str:
         print(f"[配置] 使用 {AUTOTEST_CONFIG} 中的 bundle_id：{saved}")
         return saved
 
+    if not allow_prompt:
+        print(f"[配置] 未提供 bundle_id，且未找到 {AUTOTEST_CONFIG}，将按任务描述直接执行")
+        return ""
+
     # 首次运行，询问用户
     print(f"\n未找到 {AUTOTEST_CONFIG}，请输入被测应用的 Bundle ID（如 com.example.app）：")
     try:
         bundle_id = input("Bundle ID: ").strip()
     except EOFError:
-        print("错误：非交互环境下无法询问 Bundle ID，请通过 --bundle-id 参数传入，或在项目根目录创建 .autotest.yml 文件（bundle_id: com.example.app）")
-        sys.exit(1)
+        print(f"[配置] 当前环境不可交互，跳过 bundle_id；如需指定请使用 --bundle-id 或配置 {AUTOTEST_CONFIG}")
+        return ""
     if not bundle_id:
-        print("错误：Bundle ID 不能为空")
-        sys.exit(1)
+        print("[配置] 未输入 bundle_id，将按任务描述直接执行")
+        return ""
     save_bundle_id_to_config(git_root, bundle_id)
     return bundle_id
 
@@ -188,15 +201,17 @@ def main():
     parser.add_argument("--list-devices", action="store_true")
     args = parser.parse_args()
 
-    # 第一步：clone / build mobile-mcp
-    run_install()
-
     if args.list_devices:
+        # 仅设备列表场景：无需任务参数，但需要先准备 agent
+        run_install()
         list_devices()
         return
 
     if not args.platform:
         parser.error("--platform 必填（ios-simulator | ios-real | android）")
+
+    if args.max_steps <= 0:
+        parser.error("--max-steps 必须为正整数")
 
     task_sources = [args.task, args.task_file, args.task_dir]
     filled = sum(1 for s in task_sources if s)
@@ -205,7 +220,12 @@ def main():
     if filled > 1:
         parser.error("--task、--task-file、--task-dir 只能指定一个")
 
+    ensure_host_os_supported(args.platform)
+
     git_root = get_git_root()
+
+    # 第一步：参数合法后再准备 mobile-mcp，避免错误调用触发重操作
+    run_install()
 
     # 第二步：环境检查（ios-simulator / android 不依赖设备，尽早暴露工具缺失）
     if args.platform != "ios-real":
@@ -218,8 +238,9 @@ def main():
     if args.platform == "ios-real":
         check_platform(args.platform, device)
 
-    # 第五步：解析 bundle_id（含 .autotest.yml 初始化流程）
-    bundle_id = resolve_bundle_id(args.bundle_id, git_root)
+    # 第五步：解析 bundle_id（非交互环境下不阻塞）
+    allow_prompt = sys.stdin.isatty() and sys.stdout.isatty()
+    bundle_id = resolve_bundle_id(args.bundle_id, git_root, allow_prompt=allow_prompt)
 
     subject = args.subject or git_root.name
     timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")

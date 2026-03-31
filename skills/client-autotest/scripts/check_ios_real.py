@@ -7,10 +7,13 @@
 
 import argparse
 import json
+import platform
 import socket
 import subprocess
+import shutil
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 WDA_PORT = 8100
@@ -18,7 +21,7 @@ TUNNEL_PORT = 60105
 
 
 def cmd_exists(name):
-    return subprocess.run(["which", name], capture_output=True).returncode == 0
+    return shutil.which(name) is not None
 
 
 def port_open(port):
@@ -53,7 +56,25 @@ def get_connected_devices() -> list[dict]:
     return []
 
 
+def is_wda_ready() -> bool:
+    try:
+        with urllib.request.urlopen(f"http://localhost:{WDA_PORT}/status", timeout=3) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+        data = json.loads(body)
+        if isinstance(data, dict):
+            if isinstance(data.get("value"), dict):
+                return data["value"].get("ready") is True
+            return data.get("ready") is True
+    except Exception:
+        return False
+    return False
+
+
 def main():
+    if platform.system() != "Darwin":
+        print(f"[错误] iOS 真机检查仅支持 macOS，当前系统：{platform.system()}")
+        sys.exit(1)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default="")
     args = parser.parse_args()
@@ -111,14 +132,7 @@ def main():
 
     # 4. WebDriverAgent
     print(f"[ios-real] 检查 WebDriverAgent（端口 {WDA_PORT}）...")
-    wda_ready = False
-    try:
-        import urllib.request
-        with urllib.request.urlopen(f"http://localhost:{WDA_PORT}/status", timeout=3) as resp:
-            if b'"ready":true' in resp.read():
-                wda_ready = True
-    except Exception:
-        pass
+    wda_ready = is_wda_ready()
 
     if wda_ready:
         print("[ios-real] WebDriverAgent 正在运行")

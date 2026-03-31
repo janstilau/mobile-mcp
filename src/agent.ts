@@ -1,15 +1,24 @@
 #!/usr/bin/env node
 import dotenv from "dotenv";
 import path from "node:path";
+import fs from "node:fs";
 
 // 优先加载项目根目录下的 .env，未找到时再尝试安装包同级目录
-if (dotenv.config({ path: path.resolve(process.cwd(), ".env") }).error) {
-	dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
+for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(__dirname, "..", ".env")]) {
+	if (!fs.existsSync(envPath)) {
+		continue;
+	}
+	const parsed = dotenv.parse(fs.readFileSync(envPath));
+	for (const [key, value] of Object.entries(parsed)) {
+		if (process.env[key] === undefined) {
+			process.env[key] = value;
+		}
+	}
+	break;
 }
 
 import OpenAI from "openai";
 import { program } from "commander";
-import fs from "node:fs";
 
 import { Robot } from "./robot";
 import { getRobotFromDevice, listAvailableDevices } from "./device-manager";
@@ -675,19 +684,27 @@ async function resolveRawArgs(
 	toolName: string,
 	rawParam: string,
 ): Promise<{ tool: string; args: Record<string, any> } | null> {
+	const trimmedParam = rawParam.trim();
+	const isLikelyUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmedParam);
+
 	switch (toolName) {
 		case "launch_app": {
+			// "open: https://..." 这类文本动作应落到 open_url，而不是 launch_app
+			if (isLikelyUrl) {
+				return { tool: "open_url", args: { url: trimmedParam } };
+			}
+
 			// 优先通过应用名称在已安装列表中查找匹配的包名
 			try {
 				const apps = await robot.listApps();
 				const app = apps.find(a =>
-					a.appName === rawParam ||
-					a.appName.includes(rawParam) ||
-					a.packageName === rawParam
+					a.appName === trimmedParam ||
+					a.appName.includes(trimmedParam) ||
+					a.packageName === trimmedParam
 				);
 				if (app) {return { tool: "launch_app", args: { packageName: app.packageName } };}
 			} catch (e) { /* 查询失败时直接使用原始参数作为包名 */ }
-			return { tool: "launch_app", args: { packageName: rawParam } };
+			return { tool: "launch_app", args: { packageName: trimmedParam } };
 		}
 		case "tap": {
 			// 先尝试解析坐标格式 "(x, y)" 或 "x,y"

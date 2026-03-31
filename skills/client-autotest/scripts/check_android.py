@@ -2,6 +2,9 @@
 # 检查 Android 环境
 # 需要：Android Platform Tools（adb）+ 设备已连接/模拟器已启动
 
+import argparse
+import platform
+import shutil
 import subprocess
 import sys
 
@@ -11,16 +14,27 @@ def run(cmd):
 
 
 def main():
+    parser = argparse.ArgumentParser(prog="check_android.py")
+    parser.parse_args()
+
+    host_os = platform.system()
+    if host_os not in ("Darwin", "Linux", "Windows"):
+        print(f"[错误] 当前系统 {host_os} 未经过 Android 检查脚本验证，建议在 macOS/Linux/Windows 上运行")
+        sys.exit(1)
+
     print("[android] 检查 adb...")
-    if run(["which", "adb"]).returncode != 0:
+    adb_path = shutil.which("adb")
+    if not adb_path:
         print("[错误] adb 未安装")
         print()
         print("  安装方式：")
         print("  macOS：brew install android-platform-tools")
         print("  Linux：sudo apt install android-tools-adb")
+        print("  Windows：choco install adb 或 Android Studio SDK Manager 安装 Platform-Tools")
         print("  或手动下载：https://developer.android.com/tools/releases/platform-tools")
         sys.exit(1)
-    version = run(["adb", "version"]).stdout.splitlines()[0]
+    version_out = run(["adb", "version"]).stdout.splitlines()
+    version = version_out[0] if version_out else f"adb ({adb_path})"
     print(f"[android] adb：{version}")
 
     print("[android] 检查已连接设备...")

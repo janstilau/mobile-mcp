@@ -2,6 +2,8 @@
 # 检查 iOS 模拟器环境
 # 需要：macOS + Xcode CLI Tools + 至少一个模拟器已 Boot
 
+import argparse
+import platform
 import subprocess
 import sys
 
@@ -11,6 +13,13 @@ def run(cmd):
 
 
 def main():
+    parser = argparse.ArgumentParser(prog="check_ios_sim.py")
+    parser.parse_args()
+
+    if platform.system() != "Darwin":
+        print(f"[错误] iOS 模拟器检查仅支持 macOS，当前系统：{platform.system()}")
+        sys.exit(1)
+
     print("[ios-sim] 检查 Xcode CLI Tools...")
     result = run(["xcode-select", "-p"])
     if result.returncode != 0:
