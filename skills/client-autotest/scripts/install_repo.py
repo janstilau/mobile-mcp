@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 REPO_URL = "git@gitlab.corp.youdao.com:luna-dev/yd_mobile_mcp_agent.git"
-REPO_BRANCH = "main"
+REPO_BRANCH = "master"
 
 
 def _install_dir() -> Path:
